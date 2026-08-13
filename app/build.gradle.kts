@@ -26,6 +26,24 @@ android {
         versionName = if (buildLabel.isEmpty()) baseVersionName else "$baseVersionName-$buildLabel"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Checked in on purpose. Without it, every machine and every CI run
+            // generates its own debug key, so builds carry different signing
+            // certificates and Android refuses to install one over another —
+            // you have to uninstall between builds. A shared debug key makes
+            // builds replace each other.
+            //
+            // This is not a secret: the alias and both passwords are Android's
+            // well-known debug defaults, and it can only sign debug builds. A
+            // release keystore would never be committed.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

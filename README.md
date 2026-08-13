@@ -90,8 +90,12 @@ The same APK is also attached to each run as the `oh-tello-debug-apk` artifact, 
 login-walled zip — the release link is the friendlier route. The **Run workflow** button on the
 Android CI workflow builds an APK from any branch on demand.
 
-These are debug builds, signed with the standard debug keystore. That is what makes them installable
-without a keystore of your own; it also means they are not suitable for distribution.
+These are debug builds. `app/debug.keystore` is committed and used to sign them, which is
+deliberate: without a shared key, every machine and every CI run generates its own, builds end up
+with different signing certificates, and Android refuses to install one over another — you would
+have to uninstall between builds. It is not a secret (the alias and passwords are Android's
+well-known debug defaults) and it signs debug builds only. A release keystore would never be
+committed.
 
 ### Which build am I holding?
 
