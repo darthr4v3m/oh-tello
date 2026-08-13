@@ -1,20 +1,24 @@
-# GitHub's "Android CI" starter workflow, with four changes:
+# GitHub's "Android CI" starter workflow, with these changes:
 #   - JDK 17 rather than the template's 11, which AGP 8.x refuses to run on.
 #   - The debug APK uploaded as an artifact, so a build can be sideloaded onto a
-#     phone without a local Android SDK. Debug is signed with the standard debug
-#     keystore, so it installs; the release variant is unsigned and will not.
-#   - That same APK published to a prerelease and linked from the pull request,
-#     because an artifact is a login-walled zip and a release asset is a direct
-#     .apk URL you can tap on the phone.
+#     phone without a local Android SDK.
+#   - Test builds published to a rolling prerelease and linked from their pull
+#     request, because an artifact is a login-walled zip and a release asset is a
+#     direct .apk URL you can tap on the phone.
+#   - Tagged commits published as a real release. Pushing to main only builds and
+#     tests; cutting a release is a deliberate act of pushing a v* tag, so a
+#     release is a fixed thing rather than something every merge overwrites.
 #   - Reports uploaded on failure, so a red run can be read without re-running it.
 name: Android CI
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
-  # Lets you build an APK from any branch on demand, from the Actions tab.
+  # Builds an APK from any branch on demand, as an artifact. Deliberately does
+  # not publish: an arbitrary branch has no release worth naming.
   workflow_dispatch:
 
 jobs:
@@ -23,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write        # publish the APK to a prerelease
+      contents: write        # publish the APK to a release
       pull-requests: write   # link it from the PR
 
     steps:
@@ -47,19 +51,26 @@ jobs:
         set -euo pipefail
         version=$(sed -n 's/^val baseVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
         [ -n "$version" ] || { echo "could not read baseVersionName"; exit 1; }
+        built_at=$(date -u +%Y%m%d-%H%MZ)
 
         if [ "$EVENT" = "pull_request" ]; then
           sha="${HEAD_SHA:0:7}"
-          provenance="pr$PR_NUMBER"
+          label="pr$PR_NUMBER-$sha"
+          apk="oh-tello-pr$PR_NUMBER-$built_at-$sha-debug.apk"
+        elif [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+          # A tagged release. The tag already pins the code, so the filename
+          # needs no timestamp or commit, and the version needs no suffix.
+          label=""
+          apk="oh-tello-$GITHUB_REF_NAME-debug.apk"
         else
           sha="${GITHUB_SHA:0:7}"
-          provenance="v$version"
+          label="v$version-$sha"
+          apk="oh-tello-v$version-$built_at-$sha-debug.apk"
         fi
 
-        built_at=$(date -u +%Y%m%d-%H%MZ)
         {
-          echo "label=$provenance-$sha"
-          echo "apk=oh-tello-$provenance-$built_at-$sha-debug.apk"
+          echo "label=$label"
+          echo "apk=$apk"
           echo "built_at=$built_at"
         } >> "$GITHUB_OUTPUT"
 
@@ -68,6 +79,7 @@ jobs:
     - name: Build with Gradle
       env:
         # Ends up in versionName, so an installed build still knows what it is.
+        # Empty for tagged releases, which carry the plain version.
         OH_TELLO_BUILD_LABEL: ${{ steps.name.outputs.label }}
       run: ./gradlew build
 
@@ -81,17 +93,21 @@ jobs:
         path: ${{ steps.name.outputs.apk }}
         if-no-files-found: error
 
-    # Skipped for pull requests from forks: those get a read-only token, so
+    # Pull requests and tags only. Pushes to main build and test but publish
+    # nothing, so a release is never quietly replaced by the next merge.
+    # Fork pull requests are skipped too: their tokens are read-only, so
     # publishing would fail the build rather than just not happening.
-    - name: Publish the APK to a prerelease
+    - name: Publish the APK
       id: publish
-      if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+      if: >-
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name == github.repository)
+        || startsWith(github.ref, 'refs/tags/v')
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         REPO: ${{ github.repository }}
         EVENT: ${{ github.event_name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
-        REF_NAME: ${{ github.ref_name }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         APK: ${{ steps.name.outputs.apk }}
       run: |
@@ -102,31 +118,39 @@ jobs:
           # The PR head, not the ephemeral merge commit: the tag has to point at
           # something that exists on the remote.
           target="$HEAD_SHA"
+          rolling=1
+          extra=(--prerelease)
+          notes='Test build for this pull request, replaced on every push. Debug-signed,
+        so it installs without a keystore and is not suitable for distribution.'
         else
-          # Tags cannot usefully carry the slashes a branch name may have.
-          tag="$(printf '%s' "$REF_NAME" | tr '/' '-')-latest"
-          title="$REF_NAME debug build"
+          tag="$GITHUB_REF_NAME"
+          title="Oh-Tello $GITHUB_REF_NAME"
           target="$GITHUB_SHA"
+          rolling=0
+          extra=(--latest)
+          notes='Release build.
+
+        Still debug-signed: the project has no release keystore yet, so this
+        installs on a device but is not suitable for distribution.'
         fi
 
-        notes='Debug APK for testing on a device, replaced on every push to this
-        branch. Debug-signed, so it installs without a keystore and is not
-        suitable for distribution.'
-
         gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 || \
-          gh release create "$tag" --repo "$REPO" --target "$target" --prerelease \
+          gh release create "$tag" --repo "$REPO" --target "$target" "${extra[@]}" \
             --title "$title" --notes "$notes"
 
-        # The filename carries a timestamp and commit, so each build is a new
-        # asset rather than a replacement. Drop the previous ones: the release
-        # should hold the current build and nothing else, so there is no way to
-        # install a stale APK by picking the wrong row.
-        stale=$(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name' \
-          | grep '\.apk$' | grep -v "^$APK$" || true)
-        while IFS= read -r asset; do
-          [ -n "$asset" ] || continue
-          gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
-        done <<< "$stale"
+        # For a pull request the filename carries a timestamp and commit, so each
+        # build is a new asset rather than a replacement. Drop the previous ones:
+        # the prerelease should hold the current build and nothing else, so there
+        # is no way to install a stale APK by picking the wrong row. A tagged
+        # release is fixed, and nothing is ever deleted from it.
+        if [ "$rolling" = "1" ]; then
+          stale=$(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name' \
+            | grep '\.apk$' | grep -v "^$APK$" || true)
+          while IFS= read -r asset; do
+            [ -n "$asset" ] || continue
+            gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
+          done <<< "$stale"
+        fi
 
         gh release upload "$tag" "$APK" --repo "$REPO" --clobber
 
@@ -153,12 +177,15 @@ jobs:
 
         Built from \`${HEAD_SHA:0:7}\` at $BUILT_AT. Tap the link on the phone and
         Android will offer to install it — no zip to unpack, no sign-in.
-        Debug-signed, so it needs no keystore of yours.
 
         The same string is stamped into the app version, so once installed you can
         still tell which build it is: it shows under the title on the first screen,
         and in Settings > Apps > Oh-Tello. This comment and the release asset are
         both replaced as new commits are pushed.
+
+        **Uninstall any previous Oh-Tello build first.** Each CI run generates its
+        own debug keystore, so builds are signed with different certificates and
+        Android refuses to install one over another.
 
         ---
         _Generated by [Claude Code](https://claude.ai/code)_

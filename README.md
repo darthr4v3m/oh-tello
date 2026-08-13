@@ -69,9 +69,18 @@ deliberately not an OSI-approved licence. The copyright holder line at the top o
 You do not need a local Android SDK to get a build onto a phone. Every CI run publishes an
 installable debug APK to a prerelease:
 
-- **From a pull request** — CI posts a comment on the PR with a direct link, edited in place as
-  new commits land, so the link at the top of the thread is always the current build.
-- **From `main`** — the [`main-latest`](../../releases) prerelease, replaced on every push.
+- **From a pull request** — a rolling `pr-<n>` prerelease. CI posts a comment on the PR with a
+  direct link, edited in place as new commits land, so the link at the top of the thread is always
+  the current build. The previous APK is deleted on each push, so there is no stale row to install
+  by mistake.
+- **A release** — push a `v*` tag and that commit is published as a real
+  [release](../../releases), which nothing later overwrites.
+
+Pushing to `main` builds and tests but publishes nothing. Cutting a release is a deliberate act:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
 
 Tap the link on the phone and Android offers to install it; no zip to unpack and no sign-in, since
 release assets on a public repo are served directly. Android will ask you to allow installs from
