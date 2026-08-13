@@ -304,3 +304,19 @@ values used here.
 - Video via `streamon` and `MediaCodec` H.264 decode on port 11111 — only once core control has
   proven solid over a few real flights.
 - Flips, mission pads, and the EDU-only commands. Deliberately out of v1.
+
+### If connecting proves flaky
+
+Connect has been seen to fail once and then work on a second press. Two plausible causes: the
+Wi-Fi lookup running before Android has finished associating with the drone's network, leaving the
+sockets on mobile data; or the drone dropping the very first `command` after power-up, which
+`djitellopy` retries for the same reason.
+
+One fix covers both — retry the handshake a few times with a backoff, redoing the socket binding on
+each attempt rather than reusing the first one's. A later attempt then finds the Wi-Fi network once
+it exists, and also resends a command that was dropped.
+
+Not implemented: it has happened once, and the session logs now record which of the two it was
+(`udp/8889: socket bound to the Wi-Fi network` against `no Wi-Fi network found`). Worth doing if it
+recurs, and worth knowing which cause it is first — the backoff and attempt count should be chosen
+from what the logs show, not guessed.
