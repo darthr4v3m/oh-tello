@@ -105,9 +105,15 @@ keytool -genkeypair -keystore debug.keystore -storetype PKCS12 \
 base64 -w0 debug.keystore     # paste into Settings > Secrets and variables > Actions
 ```
 
-On Windows, `keytool` comes with a JDK and is usually not on `PATH`; Android Studio bundles one at
-`C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`. In PowerShell, the line continuation
-is a backtick rather than a backslash:
+The alias must be `androiddebugkey` and both passwords `android` — the signing config asks for the
+key by that name. Generate the keystore with `keytool`, not with something else: Windows'
+`Export-PfxCertificate`, for instance, names the entry itself and ignores `-FriendlyName`, and the
+build then fails at `packageDebug` with "No key with alias 'androiddebugkey'".
+
+On Windows, `keytool` comes with a JDK and is usually not on `PATH`. Android Studio bundles one at
+`C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`; without it,
+`winget install EclipseAdoptium.Temurin.21.JDK` is enough. In PowerShell, the line continuation is
+a backtick rather than a backslash:
 
 ```powershell
 $keytool = "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe"

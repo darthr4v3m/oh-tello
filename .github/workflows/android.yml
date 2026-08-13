@@ -98,22 +98,14 @@ jobs:
         fi
         echo "shared=true" >> "$GITHUB_OUTPUT"
         printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > app/debug.keystore
-        # Fail loudly here rather than a minute later inside Gradle.
-        keytool -list -keystore app/debug.keystore -storepass android >/dev/null
 
-        # The build signs with the alias `androiddebugkey`, but a keystore is not
-        # always made by keytool — Windows' Export-PfxCertificate, for one, names
-        # the entry itself and ignores the friendly name — so rename whatever
-        # single key is in there rather than demanding the key be made a
-        # particular way.
-        alias=$(keytool -list -keystore app/debug.keystore -storepass android \
-          | awk -F, '/PrivateKeyEntry/{print $1; exit}')
-        [ -n "$alias" ] || { echo "no private key in the keystore"; exit 1; }
-        if [ "$alias" != "androiddebugkey" ]; then
-          echo "renaming key alias '$alias' to androiddebugkey"
-          keytool -changealias -keystore app/debug.keystore -storepass android \
-            -keypass android -alias "$alias" -destalias androiddebugkey
-        fi
+        # Checked here so a bad keystore says so in one line, rather than as a
+        # Gradle stack trace a minute later. The alias is not incidental: the
+        # signing config asks for the key by that name.
+        keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey >/dev/null || {
+          echo "::error::keystore has no key aliased androiddebugkey — see README > Building"
+          exit 1
+        }
         echo "shared debug key restored"
 
     - name: Grant execute permission for gradlew
