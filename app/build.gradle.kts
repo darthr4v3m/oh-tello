@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// The version this branch is working towards. CI parses this line, so keep it
+// a plain string literal.
+val baseVersionName = "0.1.0"
+
 android {
     namespace = "io.github.darthr4v3m.ohtello"
     compileSdk = 35
@@ -13,7 +17,13 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+
+        // CI passes something like "pr1-27b04cd" here. A descriptive APK
+        // filename only helps until the moment you install it; stamping the
+        // same string into the version means an installed build can still say
+        // where it came from, in Settings > Apps and in the app's own header.
+        val buildLabel = providers.environmentVariable("OH_TELLO_BUILD_LABEL").getOrElse("")
+        versionName = if (buildLabel.isEmpty()) baseVersionName else "$baseVersionName-$buildLabel"
     }
 
     buildTypes {
@@ -34,6 +44,8 @@ android {
 
     buildFeatures {
         compose = true
+        // For BuildConfig.VERSION_NAME, shown in the app header.
+        buildConfig = true
     }
 
     packaging {

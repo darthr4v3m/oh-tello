@@ -35,16 +35,50 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    # Names the build once, for the APK filename, the version stamped inside it,
+    # and the PR comment, so all three agree.
+    - name: Name this build
+      id: name
+      env:
+        EVENT: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        version=$(sed -n 's/^val baseVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+        [ -n "$version" ] || { echo "could not read baseVersionName"; exit 1; }
+
+        if [ "$EVENT" = "pull_request" ]; then
+          sha="${HEAD_SHA:0:7}"
+          provenance="pr$PR_NUMBER"
+        else
+          sha="${GITHUB_SHA:0:7}"
+          provenance="v$version"
+        fi
+
+        built_at=$(date -u +%Y%m%d-%H%MZ)
+        {
+          echo "label=$provenance-$sha"
+          echo "apk=oh-tello-$provenance-$built_at-$sha-debug.apk"
+          echo "built_at=$built_at"
+        } >> "$GITHUB_OUTPUT"
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     - name: Build with Gradle
+      env:
+        # Ends up in versionName, so an installed build still knows what it is.
+        OH_TELLO_BUILD_LABEL: ${{ steps.name.outputs.label }}
       run: ./gradlew build
+
+    - name: Rename the APK
+      run: mv app/build/outputs/apk/debug/app-debug.apk "${{ steps.name.outputs.apk }}"
 
     - name: Upload debug APK
       uses: actions/upload-artifact@v4
       with:
         name: oh-tello-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: ${{ steps.name.outputs.apk }}
         if-no-files-found: error
 
     # Skipped for pull requests from forks: those get a read-only token, so
@@ -59,6 +93,7 @@ jobs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REF_NAME: ${{ github.ref_name }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        APK: ${{ steps.name.outputs.apk }}
       run: |
         set -euo pipefail
         if [ "$EVENT" = "pull_request" ]; then
@@ -74,15 +109,29 @@ jobs:
           target="$GITHUB_SHA"
         fi
 
-        notes='Debug APK, replaced on every push to this branch. Debug-signed and
-        unversioned — for testing on a device, not a release.'
+        notes='Debug APK for testing on a device, replaced on every push to this
+        branch. Debug-signed, so it installs without a keystore and is not
+        suitable for distribution.'
 
         gh release view "$tag" --repo "$REPO" >/dev/null 2>&1 || \
           gh release create "$tag" --repo "$REPO" --target "$target" --prerelease \
             --title "$title" --notes "$notes"
-        gh release upload "$tag" app/build/outputs/apk/debug/app-debug.apk --repo "$REPO" --clobber
 
-        echo "url=https://github.com/$REPO/releases/download/$tag/app-debug.apk" >> "$GITHUB_OUTPUT"
+        # The filename carries a timestamp and commit, so each build is a new
+        # asset rather than a replacement. Drop the previous ones: the release
+        # should hold the current build and nothing else, so there is no way to
+        # install a stale APK by picking the wrong row.
+        stale=$(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name' \
+          | grep '\.apk$' | grep -v "^$APK$" || true)
+        while IFS= read -r asset; do
+          [ -n "$asset" ] || continue
+          gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
+        done <<< "$stale"
+
+        gh release upload "$tag" "$APK" --repo "$REPO" --clobber
+
+        echo "url=https://github.com/$REPO/releases/download/$tag/$APK" >> "$GITHUB_OUTPUT"
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
     # One comment, edited in place on later pushes, rather than a new one per build.
     - name: Link the APK from the pull request
@@ -93,18 +142,23 @@ jobs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         APK_URL: ${{ steps.publish.outputs.url }}
+        APK: ${{ steps.name.outputs.apk }}
+        BUILT_AT: ${{ steps.name.outputs.built_at }}
       run: |
         set -euo pipefail
         marker='<!-- oh-tello-apk -->'
         body=$(cat <<EOF
         $marker
-        ### 📲 [Download app-debug.apk]($APK_URL)
+        ### 📲 [$APK]($APK_URL)
 
-        Built from \`${HEAD_SHA:0:7}\`. Tap the link on the phone and Android will
-        offer to install it — no zip to unpack, no sign-in. Debug-signed, so it
-        needs no keystore of yours.
+        Built from \`${HEAD_SHA:0:7}\` at $BUILT_AT. Tap the link on the phone and
+        Android will offer to install it — no zip to unpack, no sign-in.
+        Debug-signed, so it needs no keystore of yours.
 
-        This comment is edited in place as new commits are pushed.
+        The same string is stamped into the app version, so once installed you can
+        still tell which build it is: it shows under the title on the first screen,
+        and in Settings > Apps > Oh-Tello. This comment and the release asset are
+        both replaced as new commits are pushed.
 
         ---
         _Generated by [Claude Code](https://claude.ai/code)_

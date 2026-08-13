@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.darthr4v3m.ohtello.BuildConfig
 import io.github.darthr4v3m.ohtello.tello.CommandLogEntry
 import io.github.darthr4v3m.ohtello.tello.ConnectionState
 import io.github.darthr4v3m.ohtello.tello.protocol.MoveDirection
@@ -130,11 +131,22 @@ private fun Header(connection: ConnectionState, telemetryFresh: Boolean) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "Oh-Tello",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        Column {
+            Text(
+                text = "Oh-Tello",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            // Which build this is. On a phone carrying several test builds, the
+            // APK filename is long gone by the time you are stood in a field
+            // wondering whether the fix you are testing is actually installed.
+            Text(
+                text = BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         StatusChip(connection = connection, telemetryFresh = telemetryFresh)
     }
 }

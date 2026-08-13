@@ -84,6 +84,27 @@ Android CI workflow builds an APK from any branch on demand.
 These are debug builds, signed with the standard debug keystore. That is what makes them installable
 without a keystore of your own; it also means they are not suitable for distribution.
 
+### Which build am I holding?
+
+APKs are named `oh-tello-<provenance>-<built>-<commit>-debug.apk`, so a Downloads folder with
+several of them in it is readable at a glance:
+
+```
+oh-tello-pr1-20260813-1352Z-abcdef1-debug.apk     from pull request 1
+oh-tello-v0.1.0-20260814-0907Z-1122334-debug.apk  from main, working towards 0.1.0
+```
+
+The timestamp is UTC, and the commit is what pins the file to exact source — two builds can share a
+minute, but not a commit.
+
+That only helps until you install it. The same `<provenance>-<commit>` string is therefore stamped
+into the app's version name, so an installed build can still say where it came from: it appears
+under the title on the first screen, and in Settings → Apps → Oh-Tello. Local builds have no such
+suffix and read as plain `0.1.0`.
+
+One caveat: every build shares an `applicationId`, so installing one replaces any other. You cannot
+keep a PR build and a main build side by side without giving them distinct application IDs.
+
 To build locally instead, you need Android Studio (or a local Android SDK) and JDK 17+.
 
 ```bash
