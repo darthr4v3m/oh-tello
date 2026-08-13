@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Non-adaptive fallback for API 24/25, which ignore mipmap-anydpi-v26. The
+    dark square is baked in here since there is no separate background layer.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FF101418"
+        android:pathData="M0,0 h108 v108 h-108 z" />
+    <path
+        android:strokeColor="#FF6FD3FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M36,36 L72,72 M72,36 L36,72" />
+    <path
+        android:fillColor="#FF6FD3FF"
+        android:pathData="M54,45 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <path
+        android:strokeColor="#FFB8E8FF"
+        android:strokeWidth="4"
+        android:pathData="M36,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:strokeColor="#FFB8E8FF"
+        android:strokeWidth="4"
+        android:pathData="M72,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:strokeColor="#FFB8E8FF"
+        android:strokeWidth="4"
+        android:pathData="M36,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path
+        android:strokeColor="#FFB8E8FF"
+        android:strokeWidth="4"
+        android:pathData="M72,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+</vector>

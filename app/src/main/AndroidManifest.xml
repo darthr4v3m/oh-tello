@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required for any socket use, including purely local UDP to the drone. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        Needed to find the Wi-Fi Network object and bind our sockets to it. The
+        Tello's access point has no internet, so Android keeps mobile data as the
+        default network and unbound UDP would leave via cellular and never reach
+        the drone. No location permission is needed: we never scan for networks,
+        we only look at the network the user already joined.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OhTello">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.OhTello">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
