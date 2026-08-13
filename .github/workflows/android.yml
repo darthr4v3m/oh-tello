@@ -21,6 +21,13 @@ on:
   # not publish: an arbitrary branch has no release worth naming.
   workflow_dispatch:
 
+# Pushes in quick succession overlap, and a slower older run finishing last
+# leaves the release asset and the PR comment pointing at an older build than
+# the branch actually has. Only the newest run for a ref is worth finishing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
 
