@@ -52,10 +52,10 @@ Also in, beyond the v1 list: a two-tap `emergency` motor cutoff, an idle keepali
 does not auto-land after 15 seconds of silence, and Wi-Fi socket binding (see
 [Talking to a network with no internet](#talking-to-a-network-with-no-internet)).
 
-**Not yet flown.** The protocol and controller layers have unit tests that pass (see
-[Testing](#testing)), but nothing here has been run against a real drone yet, and the Android
-build itself has not been compiled — it was written in an environment with no access to Google's
-Maven repo or the Android SDK. First run should be a bench test with the props off.
+**Flown.** First real flight on 13 August 2026, from a Pixel 7 running Android 17 — the device the
+official app cannot launch on. Connect and handshake, takeoff, land, the discrete moves, yaw, and
+altitude all worked against the drone. The protocol and controller layers also have unit tests that
+pass without a device (see [Testing](#testing)).
 
 ## Licence
 
