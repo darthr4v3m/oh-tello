@@ -37,7 +37,13 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
+
+    # Replaces setup-java's `cache: gradle`, which is a plain save/restore of
+    # ~/.gradle. This one also carries the build cache and configuration cache,
+    # and writes only what changed. It populates the cache from main and reads
+    # it everywhere else, which is its default and what we want.
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
 
     # Names the build once, for the APK filename, the version stamped inside it,
     # and the PR comment, so all three agree.
@@ -81,7 +87,16 @@ jobs:
         # Ends up in versionName, so an installed build still knows what it is.
         # Empty for tagged releases, which carry the plain version.
         OH_TELLO_BUILD_LABEL: ${{ steps.name.outputs.label }}
-      run: ./gradlew build
+      run: |
+        set -euo pipefail
+        # `build` assembles and lints the release variant as well, which is
+        # unsigned and never shipped — pure cost on an ordinary run. Tags get
+        # the full thing, since that is when the release variant might matter.
+        if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+          ./gradlew build
+        else
+          ./gradlew assembleDebug testDebugUnitTest lintDebug
+        fi
 
     - name: Rename the APK
       run: mv app/build/outputs/apk/debug/app-debug.apk "${{ steps.name.outputs.apk }}"
