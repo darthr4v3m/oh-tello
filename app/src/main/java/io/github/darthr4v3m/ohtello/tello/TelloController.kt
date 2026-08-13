@@ -63,6 +63,8 @@ class TelloController(
     private val socketBinder: SocketBinder = SocketBinder.Unbound,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Mirrors the console to disk so a bad connection can be read back later. */
+    private val sessionLog: SessionLogStore? = null,
 ) {
 
     private val _connection = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -416,6 +418,7 @@ class TelloController(
             kind = kind,
             text = text,
         )
+        sessionLog?.append(entry)
         _log.update { entries ->
             val appended = entries + entry
             if (appended.size > MAX_LOG_ENTRIES) {

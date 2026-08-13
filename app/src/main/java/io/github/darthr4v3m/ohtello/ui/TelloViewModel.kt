@@ -1,10 +1,13 @@
 package io.github.darthr4v3m.ohtello.ui
 
 import android.app.Application
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.darthr4v3m.ohtello.BuildConfig
 import io.github.darthr4v3m.ohtello.tello.CommandLogEntry
 import io.github.darthr4v3m.ohtello.tello.ConnectionState
+import io.github.darthr4v3m.ohtello.tello.SessionLogStore
 import io.github.darthr4v3m.ohtello.tello.TelloController
 import io.github.darthr4v3m.ohtello.tello.WifiSocketBinder
 import io.github.darthr4v3m.ohtello.tello.protocol.MoveDirection
@@ -17,10 +20,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 
 class TelloViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val controller = TelloController(socketBinder = WifiSocketBinder(application))
+    private val sessionLog = SessionLogStore(File(application.filesDir, "logs"))
+
+    private val controller = TelloController(
+        socketBinder = WifiSocketBinder(application),
+        sessionLog = sessionLog,
+    )
+
+    init {
+        // Recorded per run of the app, and stamped with what produced it: a log
+        // sent on later is worth little without the build and the device.
+        sessionLog.startSession(
+            "Oh-Tello ${BuildConfig.VERSION_NAME} — ${Build.MANUFACTURER} ${Build.MODEL}, " +
+                "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+        )
+    }
+
+    /** The stored sessions as one blob, for the console's share button. */
+    fun logsForSharing(): String = sessionLog.shareableText()
 
     val connection: StateFlow<ConnectionState> = controller.connection
     val state: StateFlow<TelloState?> = controller.state

@@ -202,6 +202,7 @@ app/src/main/java/io/github/darthr4v3m/ohtello/
 │   │   ├── TelloResponse.kt     ok / value / error / timeout parsing
 │   │   └── TelloState.kt        telemetry packet parsing
 │   ├── TelloController.kt       the sockets, the serial command queue, the StateFlows
+│   ├── SessionLogStore.kt       the console of the last 10 app sessions, on disk
 │   ├── SocketBinder.kt          interface for pinning a socket to a network
 │   └── WifiSocketBinder.kt      the Android implementation of that
 └── ui/                          Compose screen + ViewModel
@@ -268,6 +269,13 @@ drone behaves. First real-drone smoke test, props off:
    "no telemetry".
 
 Emulators cannot test any of this; it needs real Wi-Fi and a real drone.
+
+### When something goes wrong in the air
+
+The console keeps the last 10 app sessions on disk, written as they happen rather than saved on
+exit, so a log survives the app being killed mid-flight. **Share** in the console sends all of them
+as text — each is headed with the build, the phone and the Android version. That is the thing worth
+attaching to a bug report; the on-screen console is gone the moment the app restarts.
 
 ## On KTello
 

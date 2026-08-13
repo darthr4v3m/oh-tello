@@ -1,5 +1,6 @@
 package io.github.darthr4v3m.ohtello.ui
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -120,6 +122,7 @@ fun TelloScreen(
             showKeepAlives = showKeepAlives,
             onShowKeepAlivesChange = viewModel::setShowKeepAlives,
             onClear = viewModel::clearLog,
+            onShare = viewModel::logsForSharing,
         )
     }
 }
@@ -492,7 +495,9 @@ private fun ConsoleCard(
     showKeepAlives: Boolean,
     onShowKeepAlivesChange: (Boolean) -> Unit,
     onClear: () -> Unit,
+    onShare: () -> String,
 ) {
+    val context = LocalContext.current
     val visible = remember(entries, showKeepAlives) {
         if (showKeepAlives) {
             entries
@@ -522,6 +527,20 @@ private fun ConsoleCard(
                 )
                 Spacer(Modifier.width(4.dp))
                 Switch(checked = showKeepAlives, onCheckedChange = onShowKeepAlivesChange)
+                TextButton(
+                    onClick = {
+                        // Every stored session, not just what is on screen: the
+                        // run worth reading is usually the one before this one.
+                        val share = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Oh-Tello console log")
+                            putExtra(Intent.EXTRA_TEXT, onShare())
+                        }
+                        context.startActivity(Intent.createChooser(share, "Share console log"))
+                    },
+                ) {
+                    Text("Share")
+                }
                 TextButton(onClick = onClear) { Text("Clear") }
             }
         }
