@@ -81,9 +81,11 @@ jobs:
         # Ends up in versionName, so an installed build still knows what it is.
         # Empty for tagged releases, which carry the plain version.
         OH_TELLO_BUILD_LABEL: ${{ steps.name.outputs.label }}
-      # Not `build`: that also assembles and lints the release variant, which is
-      # unsigned and never shipped.
-      run: ./gradlew assembleDebug testDebugUnitTest lintDebug
+      # `build` deliberately, not just the debug tasks: this also assembles,
+      # dexes and lints the release variant. It costs about 40s and is the only
+      # thing standing between a release-only problem — a proguard rule, a lint
+      # check that only runs on release — and the day you cut a release.
+      run: ./gradlew build
 
     - name: Rename the APK
       run: mv app/build/outputs/apk/debug/app-debug.apk "${{ steps.name.outputs.apk }}"
