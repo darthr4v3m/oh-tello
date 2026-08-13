@@ -90,4 +90,37 @@ class SessionLogStoreTest {
 
         assertTrue(store.sessions().isEmpty())
     }
+
+    @Test
+    fun `concurrent appends neither throw nor corrupt a line`() {
+        // The console is written from several threads at once: the reply waiter
+        // under the send mutex, a priority land that bypasses it, and disconnect
+        // on the main thread. Formatting a timestamp outside the lock let those
+        // trample each other's SimpleDateFormat.
+        val store = store()
+        store.startSession("header")
+
+        val threads = 8
+        val perThread = 150
+        val failures = java.util.concurrent.ConcurrentLinkedQueue<Throwable>()
+        val start = java.util.concurrent.CountDownLatch(1)
+        val workers = (0 until threads).map { worker ->
+            Thread {
+                start.await()
+                runCatching {
+                    repeat(perThread) { store.append(entry("worker $worker line $it")) }
+                }.onFailure { failures += it }
+            }.apply { start() }
+        }
+        start.countDown()
+        workers.forEach { it.join() }
+
+        assertTrue("append threw: ${failures.firstOrNull()}", failures.isEmpty())
+
+        val lines = store.sessions().single().readLines().drop(1)
+        assertEquals(threads * perThread, lines.size)
+        val wellFormed = Regex("""^\d{2}:\d{2}:\d{2}\.\d{3} {2}\w+ +.+$""")
+        val mangled = lines.filterNot { wellFormed.matches(it) }
+        assertTrue("mangled lines: ${mangled.take(3)}", mangled.isEmpty())
+    }
 }

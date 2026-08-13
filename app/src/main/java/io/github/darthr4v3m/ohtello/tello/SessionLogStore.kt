@@ -45,18 +45,29 @@ class SessionLogStore(
         }
     }
 
-    /** Appends one console line. Failures are swallowed: logging must not break flying. */
+    /**
+     * Appends one console line. Failures are swallowed: logging must not break
+     * flying.
+     *
+     * Formatting happens under the lock as well as the write. SimpleDateFormat
+     * carries mutable state, and this is called from several threads at once —
+     * the reply waiter under the send mutex, a priority land or emergency that
+     * deliberately bypasses it, and disconnect on the main thread. Formatting
+     * outside the lock let those corrupt each other, and the exception that
+     * comes out of a concurrently used SimpleDateFormat would propagate through
+     * log() into the send path and take the app down mid-flight.
+     */
     fun append(entry: CommandLogEntry) {
         val file = currentSession ?: return
-        val line = buildString {
-            append(lineStamp.format(Date(entry.timestampMillis)))
-            append("  ")
-            append(entry.kind.name.padEnd(KIND_WIDTH))
-            append("  ")
-            append(entry.text)
-            append('\n')
-        }
         synchronized(lock) {
+            val line = buildString {
+                append(lineStamp.format(Date(entry.timestampMillis)))
+                append("  ")
+                append(entry.kind.name.padEnd(KIND_WIDTH))
+                append("  ")
+                append(entry.text)
+                append('\n')
+            }
             runCatching { file.appendText(line) }
         }
     }
