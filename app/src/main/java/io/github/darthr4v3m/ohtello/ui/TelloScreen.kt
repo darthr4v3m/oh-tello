@@ -251,7 +251,9 @@ private fun TelemetryCard(
             )
         }
 
-        if (!telemetryFresh) {
+        // Only meaningful once connected — before that, of course there is no
+        // telemetry, and warning about it reads as a fault that isn't one.
+        if (connected && !telemetryFresh) {
             Text(
                 text = "No state packet in the last 2 seconds.",
                 style = MaterialTheme.typography.bodySmall,
