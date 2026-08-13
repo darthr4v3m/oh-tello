@@ -1,5 +1,8 @@
-# GitHub's "Android CI" starter workflow, with two changes:
+# GitHub's "Android CI" starter workflow, with three changes:
 #   - JDK 17 rather than the template's 11, which AGP 8.x refuses to run on.
+#   - The debug APK uploaded as an artifact, so a build can be sideloaded onto a
+#     phone without a local Android SDK. Debug is signed with the standard debug
+#     keystore, so it installs; the release variant is unsigned and will not.
 #   - Reports uploaded on failure, so a red run can be read without re-running it.
 name: Android CI
 
@@ -8,6 +11,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Lets you build an APK from any branch on demand, from the Actions tab.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -27,6 +32,13 @@ jobs:
       run: chmod +x gradlew
     - name: Build with Gradle
       run: ./gradlew build
+
+    - name: Upload debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: oh-tello-debug-apk
+        path: app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error
 
     - name: Upload reports
       if: failure()

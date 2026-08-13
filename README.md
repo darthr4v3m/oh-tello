@@ -66,7 +66,14 @@ deliberately not an OSI-approved licence. The copyright holder line at the top o
 
 ## Building
 
-Requires Android Studio (or a local Android SDK) and JDK 17+.
+Every CI run uploads an installable debug APK, so you do not need a local Android SDK to get one
+onto a phone: open the run under [Actions](../../actions), download the `oh-tello-debug-apk`
+artifact, unzip it, and install `app-debug.apk`. GitHub serves artifacts as a zip, so from the
+phone itself you will need a file manager to unzip; from a desktop, `adb install app-debug.apk` is
+quicker. Android will ask you to allow installs from that source the first time. The **Run
+workflow** button on the Android CI workflow builds an APK from any branch on demand.
+
+To build locally instead, you need Android Studio (or a local Android SDK) and JDK 17+.
 
 ```bash
 ./gradlew assembleDebug          # APK at app/build/outputs/apk/debug/
