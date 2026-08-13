@@ -80,8 +80,13 @@ class TelloControllerTest {
             async { controller.move(MoveDirection.BACK, 30) },
         ).awaitAll()
 
+        // Which of the two concurrent callers reaches the mutex first is up to
+        // thread scheduling, so the order between them is not a property worth
+        // asserting — only that both arrived, and that they did not overlap.
         val commands = drone.received.toList()
-        assertEquals(listOf("command", "forward 30", "back 30"), commands)
+        assertEquals(3, commands.size)
+        assertEquals("command", commands.first())
+        assertEquals(setOf("forward 30", "back 30"), commands.drop(1).toSet())
 
         // Deliberately not `>= REPLY_DELAY_MS`: sleep can return a millisecond
         // shy of its argument against a clock this coarse, which failed a CI run
