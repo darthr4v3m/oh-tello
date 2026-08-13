@@ -105,6 +105,16 @@ keytool -genkeypair -keystore debug.keystore -storetype PKCS12 \
 base64 -w0 debug.keystore     # paste into Settings > Secrets and variables > Actions
 ```
 
+On Windows, `keytool` comes with a JDK and is usually not on `PATH`; Android Studio bundles one at
+`C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe`. In PowerShell, the line continuation
+is a backtick rather than a backslash:
+
+```powershell
+$keytool = "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe"
+& $keytool -genkeypair -keystore debug.keystore -storetype PKCS12 -storepass android -keypass android -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10950
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\debug.keystore")) | Set-Clipboard
+```
+
 The passwords and alias are Android's debug defaults and the build expects them. Rotating the key
 changes the signing certificate, so the next build will not install over an older one — uninstall
 once after rotating.
