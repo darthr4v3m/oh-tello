@@ -66,12 +66,23 @@ deliberately not an OSI-approved licence. The copyright holder line at the top o
 
 ## Building
 
-Every CI run uploads an installable debug APK, so you do not need a local Android SDK to get one
-onto a phone: open the run under [Actions](../../actions), download the `oh-tello-debug-apk`
-artifact, unzip it, and install `app-debug.apk`. GitHub serves artifacts as a zip, so from the
-phone itself you will need a file manager to unzip; from a desktop, `adb install app-debug.apk` is
-quicker. Android will ask you to allow installs from that source the first time. The **Run
-workflow** button on the Android CI workflow builds an APK from any branch on demand.
+You do not need a local Android SDK to get a build onto a phone. Every CI run publishes an
+installable debug APK to a prerelease:
+
+- **From a pull request** — CI posts a comment on the PR with a direct link, edited in place as
+  new commits land, so the link at the top of the thread is always the current build.
+- **From `main`** — the [`main-latest`](../../releases) prerelease, replaced on every push.
+
+Tap the link on the phone and Android offers to install it; no zip to unpack and no sign-in, since
+release assets on a public repo are served directly. Android will ask you to allow installs from
+your browser the first time. From a desktop, `adb install app-debug.apk` does the same job.
+
+The same APK is also attached to each run as the `oh-tello-debug-apk` artifact, which is a
+login-walled zip — the release link is the friendlier route. The **Run workflow** button on the
+Android CI workflow builds an APK from any branch on demand.
+
+These are debug builds, signed with the standard debug keystore. That is what makes them installable
+without a keystore of your own; it also means they are not suitable for distribution.
 
 To build locally instead, you need Android Studio (or a local Android SDK) and JDK 17+.
 
