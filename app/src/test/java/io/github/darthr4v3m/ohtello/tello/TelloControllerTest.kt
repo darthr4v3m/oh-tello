@@ -67,11 +67,11 @@ class TelloControllerTest {
 
     @Test
     fun `commands are serialised, never overlapped`() = runBlocking {
-        // The drone takes 300ms to answer. If the controller let a second
-        // command go out before the first reply landed, the drone would see
-        // them within a few milliseconds of each other.
+        // The drone takes REPLY_DELAY_MS to answer. If the controller let a
+        // second command go out before the first reply landed, the drone would
+        // see them within a few milliseconds of each other.
         drone.responder = { command ->
-            if (command == "command") "ok" else { Thread.sleep(300); "ok" }
+            if (command == "command") "ok" else { Thread.sleep(REPLY_DELAY_MS); "ok" }
         }
         assertTrue(controller.connect())
 
@@ -83,9 +83,16 @@ class TelloControllerTest {
         val commands = drone.received.toList()
         assertEquals(listOf("command", "forward 30", "back 30"), commands)
 
+        // Deliberately not `>= REPLY_DELAY_MS`: sleep can return a millisecond
+        // shy of its argument against a clock this coarse, which failed a CI run
+        // at 299ms. Overlapping sends would show a gap of nearly zero, so the
+        // tolerance costs the test nothing.
         val timings = drone.receivedAtMillis.toList()
         val gap = timings[2] - timings[1]
-        assertTrue("second command arrived after only ${gap}ms", gap >= 300)
+        assertTrue(
+            "second command arrived after only ${gap}ms",
+            gap >= REPLY_DELAY_MS - TIMING_SLACK_MS,
+        )
     }
 
     @Test
@@ -189,5 +196,13 @@ class TelloControllerTest {
         val lines = controller.log.value.map { it.text }
         assertTrue(lines.any { it == "→ battery?" })
         assertTrue(lines.any { it == "← 86" })
+    }
+
+    private companion object {
+        /** How long the fake drone takes to answer a movement command. */
+        const val REPLY_DELAY_MS = 300L
+
+        /** Allowance for clock granularity on a loaded CI runner. */
+        const val TIMING_SLACK_MS = 50L
     }
 }
