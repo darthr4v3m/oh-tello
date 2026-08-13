@@ -28,19 +28,21 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // Checked in on purpose. Without it, every machine and every CI run
-            // generates its own debug key, so builds carry different signing
-            // certificates and Android refuses to install one over another —
-            // you have to uninstall between builds. A shared debug key makes
-            // builds replace each other.
+            // CI decodes the DEBUG_KEYSTORE_BASE64 secret to this path before
+            // building, so every CI build is signed with the same key and they
+            // replace each other on a device rather than needing an uninstall
+            // between them. The key is not in the repository.
             //
-            // This is not a secret: the alias and both passwords are Android's
-            // well-known debug defaults, and it can only sign debug builds. A
-            // release keystore would never be committed.
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            // Locally the file is normally absent and AGP's own per-machine
+            // debug key is used, which is why a local build and a CI build will
+            // not install over one another. Drop a copy here if you want them to.
+            val shared = file("debug.keystore")
+            if (shared.exists()) {
+                storeFile = shared
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 

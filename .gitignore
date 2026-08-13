@@ -23,13 +23,11 @@ misc.xml
 deploymentTargetDropDown.xml
 render.experimental.xml
 
-# Keystore files
+# Keystore files. The shared debug key lives in the DEBUG_KEYSTORE_BASE64
+# repository secret and is written to app/debug.keystore during CI — it is not
+# committed, and neither is anything else that signs a build.
 *.jks
 *.keystore
-# ...except the debug key, deliberately shared so that builds from CI and from
-# any machine carry the same signature and can replace each other on a device.
-# It signs debug builds only. A release keystore does not belong here.
-!app/debug.keystore
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json

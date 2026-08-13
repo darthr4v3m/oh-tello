@@ -90,12 +90,28 @@ The same APK is also attached to each run as the `oh-tello-debug-apk` artifact, 
 login-walled zip — the release link is the friendlier route. The **Run workflow** button on the
 Android CI workflow builds an APK from any branch on demand.
 
-These are debug builds. `app/debug.keystore` is committed and used to sign them, which is
-deliberate: without a shared key, every machine and every CI run generates its own, builds end up
-with different signing certificates, and Android refuses to install one over another — you would
-have to uninstall between builds. It is not a secret (the alias and passwords are Android's
-well-known debug defaults) and it signs debug builds only. A release keystore would never be
-committed.
+These are debug builds, signed with a shared debug key so that successive CI builds replace each
+other on a device. Without one, every run generates its own key, the signing certificates differ,
+and Android refuses to install one build over another.
+
+The key is not in the repository. It lives in the `DEBUG_KEYSTORE_BASE64` repository secret and is
+written to `app/debug.keystore` during the build. To set it up, or to rotate it:
+
+```bash
+keytool -genkeypair -keystore debug.keystore -storetype PKCS12 \
+  -storepass android -keypass android -alias androiddebugkey \
+  -dname "CN=Android Debug,O=Android,C=US" \
+  -keyalg RSA -keysize 2048 -validity 10950
+base64 -w0 debug.keystore     # paste into Settings > Secrets and variables > Actions
+```
+
+The passwords and alias are Android's debug defaults and the build expects them. Rotating the key
+changes the signing certificate, so the next build will not install over an older one — uninstall
+once after rotating.
+
+Local builds normally use AGP's own per-machine debug key, so a local build and a CI build will not
+install over each other. Put a copy of the same keystore at `app/debug.keystore` if you want them
+to; it is gitignored.
 
 ### Which build am I holding?
 

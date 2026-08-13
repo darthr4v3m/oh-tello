@@ -81,6 +81,24 @@ jobs:
           echo "built_at=$built_at"
         } >> "$GITHUB_OUTPUT"
 
+    # Debug builds are signed with a shared key so they replace each other on a
+    # device instead of needing an uninstall between them. It lives in a secret
+    # rather than the repository; without it the build falls back to a
+    # throwaway key, which still works but will not install over anything else.
+    - name: Restore the debug signing key
+      env:
+        DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+      run: |
+        set -euo pipefail
+        if [ -z "${DEBUG_KEYSTORE_BASE64:-}" ]; then
+          echo "::warning::DEBUG_KEYSTORE_BASE64 is not set — this build gets a throwaway debug key and will not install over other builds"
+          exit 0
+        fi
+        printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > app/debug.keystore
+        # Fail loudly here rather than three minutes later inside Gradle.
+        keytool -list -keystore app/debug.keystore -storepass android >/dev/null
+        echo "shared debug key restored"
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     - name: Build with Gradle
