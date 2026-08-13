@@ -177,7 +177,11 @@ jobs:
             | grep '\.apk$' | grep -v "^$APK$" || true)
           while IFS= read -r asset; do
             [ -n "$asset" ] || continue
-            gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
+            # Tidying, not the job: the API 502s now and then, and the upload
+            # below publishes the new build regardless. Worth a warning, not a
+            # failed build.
+            gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes \
+              || echo "::warning::could not delete stale asset $asset"
           done <<< "$stale"
         fi
 
