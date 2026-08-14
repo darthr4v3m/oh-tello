@@ -1,6 +1,10 @@
 package io.github.darthr4v3m.ohtello.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -34,8 +39,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +52,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.darthr4v3m.ohtello.BuildConfig
@@ -74,31 +84,86 @@ fun TelloScreen(
     val connected = connection is ConnectionState.Connected
     val canFly = connected && !busy
 
+    // The keepalive is what stops the drone using its own 15s auto-land, so it
+    // only runs while someone is actually looking at the app. Pocket the phone
+    // and the drone puts itself down rather than hovering unattended.
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.setOperatorPresent(true) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.setOperatorPresent(false) }
+
+    var quitPrompt by rememberSaveable { mutableStateOf(false) }
+    val activity = LocalContext.current.findActivity()
+
+    // Back would otherwise finish the activity, close the sockets and walk away
+    // from an airborne drone without a word.
+    BackHandler(enabled = connected) { quitPrompt = true }
+
+    if (quitPrompt) {
+        QuitWhileConnectedDialog(
+            onLandAndQuit = {
+                quitPrompt = false
+                viewModel.landThen { activity?.finish() }
+            },
+            onQuitAnyway = {
+                quitPrompt = false
+                activity?.finish()
+            },
+            onDismiss = { quitPrompt = false },
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .safeDrawingPadding(),
     ) {
-        Header(connection = connection, telemetryFresh = telemetryFresh)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Header(connection = connection, telemetryFresh = telemetryFresh)
 
-        ConnectionCard(
-            connection = connection,
-            busy = busy,
-            onConnect = viewModel::connect,
-            onDisconnect = viewModel::disconnect,
-        )
+            ConnectionCard(
+                connection = connection,
+                busy = busy,
+                onConnect = viewModel::connect,
+                onDisconnect = viewModel::disconnect,
+            )
 
-        TelemetryCard(
-            state = state,
-            telemetryFresh = telemetryFresh,
-            connected = connected,
-            onRefreshBattery = viewModel::queryBattery,
-        )
+            TelemetryCard(
+                state = state,
+                telemetryFresh = telemetryFresh,
+                connected = connected,
+                busy = busy,
+                onRefreshBattery = viewModel::queryBattery,
+            )
 
+            MovementCard(
+                canFly = canFly,
+                stepCm = stepCm,
+                turnDegrees = turnDegrees,
+                onStepChange = viewModel::setStepCm,
+                onTurnChange = viewModel::setTurnDegrees,
+                onMove = viewModel::move,
+                onTurn = viewModel::turn,
+            )
+
+            ConsoleCard(
+                entries = log,
+                showKeepAlives = showKeepAlives,
+                onShowKeepAlivesChange = viewModel::setShowKeepAlives,
+                onClear = viewModel::clearLog,
+                onShare = viewModel::logsForSharing,
+            )
+        }
+
+        // Outside the scroll on purpose. Land and Emergency are the controls you
+        // reach for when something is going wrong, and scrolling to find them is
+        // not acceptable then — nor is having them at the top, out of thumb reach.
         FlightCard(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             canFly = canFly,
             connected = connected,
             emergencyArmed = emergencyArmed,
@@ -106,25 +171,40 @@ fun TelloScreen(
             onLand = viewModel::land,
             onEmergency = viewModel::emergency,
         )
-
-        MovementCard(
-            canFly = canFly,
-            stepCm = stepCm,
-            turnDegrees = turnDegrees,
-            onStepChange = viewModel::setStepCm,
-            onTurnChange = viewModel::setTurnDegrees,
-            onMove = viewModel::move,
-            onTurn = viewModel::turn,
-        )
-
-        ConsoleCard(
-            entries = log,
-            showKeepAlives = showKeepAlives,
-            onShowKeepAlivesChange = viewModel::setShowKeepAlives,
-            onClear = viewModel::clearLog,
-            onShare = viewModel::logsForSharing,
-        )
     }
+}
+
+/**
+ * The Activity behind a Compose context. LocalActivity would do this, but it
+ * arrived in androidx.activity 1.10 and the project is pinned to 1.9.3.
+ */
+private fun Context.findActivity(): Activity? {
+    var context: Context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
+}
+
+@Composable
+private fun QuitWhileConnectedDialog(
+    onLandAndQuit: () -> Unit,
+    onQuitAnyway: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("The drone may still be flying") },
+        text = {
+            Text(
+                "Leaving closes the link. If the drone is airborne it will hover until its own " +
+                    "failsafe lands it, about 15 seconds later, wherever it happens to be.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onLandAndQuit) { Text("Land, then quit") } },
+        dismissButton = { TextButton(onClick = onQuitAnyway) { Text("Quit anyway") } },
+    )
 }
 
 @Composable
@@ -233,6 +313,7 @@ private fun TelemetryCard(
     state: TelloState?,
     telemetryFresh: Boolean,
     connected: Boolean,
+    busy: Boolean,
     onRefreshBattery: () -> Unit,
 ) {
     SectionCard {
@@ -242,7 +323,7 @@ private fun TelemetryCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Telemetry", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onRefreshBattery, enabled = connected) {
+            TextButton(onClick = onRefreshBattery, enabled = connected && !busy) {
                 Text("battery?")
             }
         }
@@ -305,6 +386,7 @@ private fun Readout(label: String, value: String?) {
 
 @Composable
 private fun FlightCard(
+    modifier: Modifier = Modifier,
     canFly: Boolean,
     connected: Boolean,
     emergencyArmed: Boolean,
@@ -312,7 +394,7 @@ private fun FlightCard(
     onLand: () -> Unit,
     onEmergency: () -> Unit,
 ) {
-    SectionCard {
+    SectionCard(modifier = modifier) {
         Text("Flight", style = MaterialTheme.typography.titleMedium)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -588,9 +670,9 @@ private fun CommandLogEntry.Kind.color(): Color = when (this) {
 }
 
 @Composable
-private fun SectionCard(content: @Composable () -> Unit) {
+private fun SectionCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(

@@ -19,11 +19,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OhTello">
 
+        <!--
+            Portrait is locked deliberately: in landscape the Land and Emergency
+            controls leave the screen, and tilting the phone to look up at the
+            drone is exactly the gesture that would rotate it.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTop"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.OhTello">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -185,8 +185,11 @@ Keep the prop guards on for every development test flight.
 ### Safety notes
 
 - The drone auto-lands if it hears nothing for 15 seconds. The app sends an idle `command`
-  keepalive every 5 seconds to prevent that, which also means **the drone will not land itself if
-  you walk away** — land it deliberately.
+  keepalive every 5 seconds to prevent that **only while the app is in the foreground**. Lock the
+  phone, switch apps, or close it, and the keepalive stops: the drone lands itself 10–15 seconds
+  later, wherever it happens to be. That is deliberate — an unattended drone should come down — but
+  it also means glancing at another app mid-flight will land it.
+- Pressing back while connected asks first, and offers to land before leaving.
 - A command timeout does not stop the drone. It means the app stopped waiting for the reply, not
   that the drone stopped moving.
 - Battery below 20% shows a warning. The drone gets unhappy well before 0%.

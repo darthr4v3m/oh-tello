@@ -76,14 +76,25 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
     fun takeoff() = runExclusively { controller.takeoff() }
 
     /**
-     * Land always works. If the queue is busy — mid `forward 500`, say — the
-     * command jumps it rather than waiting out the other command's timeout.
+     * Land always works, and never through [runExclusively].
+     *
+     * It used to jump the queue only when `busy` was set, but `busy` is set by
+     * this class and knows nothing about the controller's own keepalive — one of
+     * those stuck in a five second timeout holds the queue with `busy` false, and
+     * Land would have waited behind it.
      */
     fun land() {
-        if (_busy.value) {
-            viewModelScope.launch { controller.sendPriority(TelloCommands.LAND) }
-        } else {
-            runExclusively { controller.land() }
+        viewModelScope.launch { controller.land() }
+    }
+
+    /** Called as the app comes and goes; see TelloController.setOperatorPresent. */
+    fun setOperatorPresent(present: Boolean) = controller.setOperatorPresent(present)
+
+    /** Land, then let the caller finish the activity — used by the back gesture. */
+    fun landThen(onDone: () -> Unit) {
+        viewModelScope.launch {
+            controller.land()
+            onDone()
         }
     }
 
@@ -104,7 +115,7 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
         }
         disarmJob?.cancel()
         _emergencyArmed.value = false
-        viewModelScope.launch { controller.sendPriority(TelloCommands.EMERGENCY) }
+        viewModelScope.launch { controller.emergency() }
     }
 
     fun move(direction: MoveDirection) = runExclusively { controller.move(direction, _stepCm.value) }

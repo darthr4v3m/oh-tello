@@ -92,6 +92,7 @@ class TelloController(
     @Volatile private var controllerScope: CoroutineScope? = null
     @Volatile private var replies: Channel<String> = Channel(Channel.UNLIMITED)
     @Volatile private var lastCommandAtMillis: Long = 0
+    @Volatile private var operatorPresent: Boolean = true
     @Volatile private var lastStateAtMillis: Long = 0
 
     // ---------------------------------------------------------------- lifecycle
@@ -158,11 +159,24 @@ class TelloController(
     /** `takeoff`. Slow to answer — the drone replies once it is airborne. */
     suspend fun takeoff(): TelloResponse = sendCommand(TelloCommands.TAKEOFF, TAKEOFF_TIMEOUT_MS)
 
-    /** `land`. Answers once it is down. */
-    suspend fun land(): TelloResponse = sendCommand(TelloCommands.LAND, LAND_TIMEOUT_MS)
+    /**
+     * `land`. Jumps the queue and is sent more than once.
+     *
+     * Never waits its turn: the serial queue can be held by a keepalive burning
+     * a five second timeout, or by a move with twenty seconds left on its clock,
+     * and a pilot pressing Land does not care which. Repeated because this is one
+     * UDP datagram over a marginal 2.4GHz link, where a dropped packet looks
+     * exactly like a successful send — and a second `land` costs nothing, the
+     * drone being already on its way down.
+     */
+    suspend fun land() = sendPriority(TelloCommands.LAND, attempts = STOP_COMMAND_ATTEMPTS)
 
-    /** `emergency` — cuts the motors immediately. The drone will drop. */
-    suspend fun emergency(): TelloResponse = sendCommand(TelloCommands.EMERGENCY)
+    /**
+     * `emergency` — cuts the motors immediately. The drone will drop. Jumps the
+     * queue and repeats, for the same reasons as [land], more so.
+     */
+    suspend fun emergency() =
+        sendPriority(TelloCommands.EMERGENCY, attempts = STOP_COMMAND_ATTEMPTS)
 
     /** Discrete `up|down|left|right|forward|back <cm>`; distance is clamped. */
     suspend fun move(direction: MoveDirection, distanceCm: Int): TelloResponse =
@@ -211,18 +225,22 @@ class TelloController(
      * in the console: the reply to this command is whatever the in-flight
      * command's waiter picks up, and the leftover is discarded on the next send.
      */
-    suspend fun sendPriority(command: String) {
+    suspend fun sendPriority(command: String, attempts: Int = 1) {
         val socket = commandSocket ?: run {
             notConnected(command)
             return
         }
         withContext(ioDispatcher) {
-            try {
-                writeDatagram(socket, command)
-                lastCommandAtMillis = clock()
-                log(CommandLogEntry.Kind.SENT, "→ $command (jumped the queue)")
-            } catch (e: IOException) {
-                log(CommandLogEntry.Kind.ERROR, "could not send `$command`: ${e.message}")
+            repeat(attempts) { attempt ->
+                if (attempt > 0) delay(STOP_COMMAND_SPACING_MS)
+                try {
+                    writeDatagram(socket, command)
+                    lastCommandAtMillis = clock()
+                    val note = if (attempts > 1) " (jumped the queue, ${attempt + 1}/$attempts)" else " (jumped the queue)"
+                    log(CommandLogEntry.Kind.SENT, "→ $command$note")
+                } catch (e: IOException) {
+                    log(CommandLogEntry.Kind.ERROR, "could not send `$command`: ${e.message}")
+                }
             }
         }
     }
@@ -348,12 +366,67 @@ class TelloController(
      * front of a command that is waiting for its reply.
      */
     private suspend fun sendKeepAlives() {
+        var consecutiveTimeouts = 0
         while (currentCoroutineContext().isActive) {
             delay(FRESHNESS_TICK_MS)
             if (_connection.value !is ConnectionState.Connected) continue
+
+            // With nobody watching the screen, the right thing is to stop
+            // talking and let the drone's own failsafe put it down. See
+            // [operatorPresent].
+            if (!operatorPresent) continue
+
             if (clock() - lastCommandAtMillis < KEEPALIVE_INTERVAL_MS) continue
-            send(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS, CommandLogEntry.Kind.KEEPALIVE)
+
+            val response =
+                send(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS, CommandLogEntry.Kind.KEEPALIVE)
+
+            // Nothing else ever moves the link out of Connected: a command that
+            // fails logs an error and leaves the UI claiming all is well, and a
+            // socket pinned to a Wi-Fi network that has gone away stays dead
+            // even after the phone rejoins. Two silent keepalives is ~10s, still
+            // inside the drone's own 15s timer, and tearing down here means the
+            // next Connect binds to the current network rather than the corpse.
+            if (response is TelloResponse.Timeout) {
+                consecutiveTimeouts++
+                if (consecutiveTimeouts >= KEEPALIVE_FAILURES_BEFORE_GIVING_UP) {
+                    failConnection(
+                        "link lost — the drone stopped answering. Check the phone is still on " +
+                            "the drone's Wi-Fi network, then connect again",
+                    )
+                    return
+                }
+            } else {
+                consecutiveTimeouts = 0
+            }
         }
+    }
+
+    /**
+     * Whether a pilot is actually looking at the app.
+     *
+     * The keepalive exists to stop the drone auto-landing mid-flight, but that
+     * failsafe is the only thing that puts the drone down if the pilot walks
+     * away — pockets the phone, takes a call, goes into the bar. So the keepalive
+     * is only sent while the app is in the foreground: leave, and the drone lands
+     * itself about fifteen seconds later, which is what the firmware's timer is
+     * for.
+     *
+     * Costs no permission — this is the app doing less in the background, not
+     * more — and stops the process waking every five seconds in your pocket.
+     */
+    fun setOperatorPresent(present: Boolean) {
+        if (operatorPresent == present) return
+        operatorPresent = present
+        if (_connection.value !is ConnectionState.Connected) return
+        log(
+            CommandLogEntry.Kind.INFO,
+            if (present) {
+                "app in the foreground — keepalive resumed"
+            } else {
+                "app backgrounded — keepalive stopped, the drone will land itself in about 15s"
+            },
+        )
     }
 
     // --------------------------------------------------------------- internals
@@ -456,6 +529,13 @@ class TelloController(
 
         /** Well inside the drone's 15s auto-land timer. */
         const val KEEPALIVE_INTERVAL_MS = 5_000L
+
+        /** Two silent keepalives, ~10s, still inside the drone's own 15s timer. */
+        const val KEEPALIVE_FAILURES_BEFORE_GIVING_UP = 2
+
+        /** `land` and `emergency` are idempotent, so losing one packet need not matter. */
+        const val STOP_COMMAND_ATTEMPTS = 3
+        const val STOP_COMMAND_SPACING_MS = 150L
 
         private const val FRESHNESS_TICK_MS = 500L
         private const val MAX_LOG_ENTRIES = 300

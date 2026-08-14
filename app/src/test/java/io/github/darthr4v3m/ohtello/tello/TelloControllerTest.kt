@@ -7,6 +7,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlin.system.measureTimeMillis
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -203,11 +204,77 @@ class TelloControllerTest {
         assertTrue(lines.any { it == "← 86" })
     }
 
+    @Test
+    fun `land jumps the queue instead of waiting behind a slow command`() = runBlocking<Unit> {
+        drone.responder = { command ->
+            if (command == "command") "ok" else { Thread.sleep(SLOW_REPLY_MS); "ok" }
+        }
+        assertTrue(controller.connect())
+
+        val move = async { controller.move(MoveDirection.FORWARD, 30) }
+        awaitReceived { it.contains("forward 30") } // the move now holds the queue
+
+        // What matters is that land does not wait for the queue. Asserting on
+        // the drone's side would prove nothing here: FakeDrone reads one packet
+        // at a time, so while it sleeps on the move it has not yet dequeued the
+        // land sitting in its socket buffer — as a real drone would have.
+        val elapsed = measureTimeMillis { controller.land() }
+        assertTrue("land waited ${elapsed}ms for the queue", elapsed < SLOW_REPLY_MS / 2)
+
+        move.await()
+        awaitReceived { it.contains("land") }
+    }
+
+    @Test
+    fun `land is repeated, because one lost datagram looks like success`() = runBlocking {
+        assertTrue(controller.connect())
+
+        controller.land()
+
+        awaitReceived {
+            it.count { command -> command == "land" } == TelloController.STOP_COMMAND_ATTEMPTS
+        }
+    }
+
+    @Test
+    fun `a link that stops answering tears itself down instead of claiming Connected`() =
+        runBlocking {
+            assertTrue(controller.connect())
+            // The drone goes silent: every keepalive from here times out.
+            drone.responder = { null }
+
+            val failed = withTimeout(
+                25_000,
+            ) {
+                var state = controller.connection.value
+                while (state !is ConnectionState.Failed) {
+                    delay(100)
+                    state = controller.connection.value
+                }
+                state
+            }
+
+            assertTrue(failed.message.contains("link lost"))
+        }
+
+    /** Waits for the fake drone to have dequeued what we expect. */
+    private suspend fun awaitReceived(
+        timeoutMillis: Long = 5_000,
+        predicate: (List<String>) -> Boolean,
+    ) {
+        withTimeout(timeoutMillis) {
+            while (!predicate(drone.received.toList())) delay(20)
+        }
+    }
+
     private companion object {
         /** How long the fake drone takes to answer a movement command. */
         const val REPLY_DELAY_MS = 300L
 
         /** Allowance for clock granularity on a loaded CI runner. */
         const val TIMING_SLACK_MS = 50L
+
+        /** A command the fake drone is deliberately slow to answer. */
+        const val SLOW_REPLY_MS = 1_500L
     }
 }
