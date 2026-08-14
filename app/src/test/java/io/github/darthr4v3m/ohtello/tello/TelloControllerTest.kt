@@ -309,6 +309,28 @@ class TelloControllerTest {
         assertFalse(controller.pilotIdle.value)
     }
 
+    @Test
+    fun `a drone on the ground is not idly hovering`() = runBlocking {
+        assertTrue(controller.connect())
+        // Telemetry says height 0: the drone is on the table, so going quiet is
+        // not something to warn about, and claiming it is hovering is a lie.
+        drone.pushState("h:0;bat:72;tof:10;time:0;")
+        delay(300)
+
+        delay(IDLE_WARNING_MS + 1_000)
+
+        assertFalse("warned about a grounded drone", controller.pilotIdle.value)
+    }
+
+    @Test
+    fun `an airborne drone going quiet does raise the warning`() = runBlocking {
+        assertTrue(controller.connect())
+        drone.pushState("h:80;bat:72;tof:90;time:12;")
+        delay(300)
+
+        awaitIdle(true)
+    }
+
     private suspend fun awaitIdle(expected: Boolean) {
         withTimeout(IDLE_WARNING_MS + 4_000) {
             while (controller.pilotIdle.value != expected) delay(50)

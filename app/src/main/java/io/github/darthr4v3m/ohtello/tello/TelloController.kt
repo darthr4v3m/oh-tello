@@ -380,9 +380,18 @@ class TelloController(
             // and would otherwise reset this forever, which is the opposite of
             // what it is for.
             val idleFor = clock() - lastPilotCommandAtMillis
+
+            // A drone on the table is not hovering on borrowed time, and saying
+            // so while it sits there is both wrong and a way to teach the pilot
+            // to ignore the warning. Same rule as the background notification:
+            // silent only when telemetry actually says it is down, since an
+            // unknown height is better warned about than assumed safe.
+            val onTheGround = _state.value?.heightCm?.let { it <= 0 } == true
+
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&
                 lastPilotCommandAtMillis != 0L &&
-                idleFor >= idleWarningMillis
+                idleFor >= idleWarningMillis &&
+                !onTheGround
 
             delay(FRESHNESS_TICK_MS)
         }

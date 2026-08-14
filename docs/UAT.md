@@ -102,11 +102,14 @@ updates continuously. No "No state packet" warning.
 and they disappear from the view.
 - [ ] Pass — notes: `______________________`
 
-### A11 — Idle banner
-**Do:** touch nothing for about 15 seconds.
-**Expect:** a coloured banner appears just above the flight controls: *"Hovering — no command for a
-while…"*. Tap any direction button; the banner clears.
-**Note:** the keepalives from A10 must **not** clear it — that is the point of the test.
+### A11 — Idle banner does NOT appear on the ground
+**Do:** with the drone connected and sitting on the table, touch nothing for 20 seconds.
+**Expect:** **no** banner. A drone on the table is not hovering on borrowed time, and saying so
+would teach you to ignore the warning. Same rule as the notification in A12: silent when telemetry
+reports height 0.
+**The airborne half of this is B8** — that is where the banner should appear, and where tapping a
+direction must clear it. The keepalives must never clear it, which is why the idle clock counts
+only commands you send.
 - [ ] Pass — notes: `______________________`
 
 ### A12 — Backgrounding on the ground does NOT nag
