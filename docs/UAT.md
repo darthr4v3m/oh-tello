@@ -12,6 +12,39 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ---
 
+## Still to run
+
+Part A is fifteen of nineteen done, on the bench. What is left, in the order to do it:
+
+| Test | What | Needs |
+| --- | --- | --- |
+| **A19** | Cold first connect, three times, one press each | drone powered on |
+| **A10** | Keepalive toggle shows a pair every ~5s | drone connected |
+| **A13** | `forward` on the ground is rejected by the drone | drone connected |
+| **A11** | Idle banner does **not** appear on the table | drone connected, 20s of patience |
+| **Part B** | All fourteen | **motors spinning**, 3 × 3 m clear |
+
+Run all four Part A checks on the same build, in one sitting — they need nothing but a connected
+drone on a table, about five minutes in total.
+
+Why these four are open:
+
+- **A19** is new. It covers the binary-packet handshake failure found on 14 Aug and fixed in
+  `a0b17b9`. It has never been run.
+- **A10** and **A13** were never reported — an oversight during the first pass, not a failure.
+- **A11** *failed* on build `b05f374`: the idle banner appeared with the drone sitting on the
+  table. Fixed in `00837e5` by gating the banner on telemetry height. **The fix has not been
+  verified on a real drone** — it is only covered by unit tests, so this one is a genuine
+  outstanding risk, not paperwork.
+
+Everything ticked in Part A below was run on `b05f374` except A16 and A18, which were run on
+`a9bdfb4`. Three fixes landed between those builds; none touched the earlier tests' behaviour, but
+they were not re-run.
+
+**Current build to test against:** `0.1.0-pr1-a0b17b9`, on PR #1.
+
+---
+
 ## Before you start
 
 - Propellers **off** for Part A. Prop **guards on** for Part B.
