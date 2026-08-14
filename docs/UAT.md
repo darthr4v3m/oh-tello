@@ -41,7 +41,9 @@ Everything ticked in Part A below was run on `b05f374` except A16 and A18, which
 `a9bdfb4`. Three fixes landed between those builds; none touched the earlier tests' behaviour, but
 they were not re-run.
 
-**Current build to test against:** `0.1.0-pr1-a0b17b9`, on PR #1.
+**Build to test against:** the newest APK linked from PR #1 — the comment there always points at
+the latest one. Write the version string it shows under the app title into the box above, so a
+result is always tied to a build.
 
 ---
 
