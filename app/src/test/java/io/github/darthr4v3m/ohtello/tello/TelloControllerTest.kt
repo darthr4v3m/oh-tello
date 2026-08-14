@@ -57,12 +57,46 @@ class TelloControllerTest {
     }
 
     @Test
+    fun `a binary packet does not fail the handshake`() = runBlocking {
+        // Seen on a real first connect: the drone answered `command` with a
+        // native-protocol packet, which decoded to mojibake and failed the
+        // connection. It is not an SDK reply, so it must not be read as one.
+        var answered = false
+        drone.rawResponder = {
+            if (answered) null else byteArrayOf(0xcc.toByte(), 0x58, 0x00, 0x7c, 0x56)
+                .also { answered = true }
+        }
+
+        assertTrue(controller.connect())
+        assertEquals(ConnectionState.Connected, controller.connection.value)
+
+        // The junk is visible in the console rather than silently swallowed —
+        // it is the evidence that says which drone state caused it.
+        assertTrue(
+            controller.log.value.any { it.text.contains("non-SDK packet") && it.text.contains("cc 58") },
+        )
+    }
+
+    @Test
+    fun `a handshake the drone ignores is tried once more before giving up`() = runBlocking {
+        // A just-powered drone can drop the first `command` of a session. The
+        // pilot's workaround is to press Connect again, so do that for them.
+        var attempts = 0
+        drone.responder = { if (++attempts == 1) null else "ok" }
+
+        assertTrue(controller.connect())
+
+        assertEquals(listOf("command", "command"), drone.received.toList())
+    }
+
+    @Test
     fun `a drone that never answers fails the connection rather than hanging`() = runBlocking {
         drone.responder = { null }
 
-        val connected = withTimeout(TelloController.HANDSHAKE_TIMEOUT_MS + 3_000) {
-            controller.connect()
-        }
+        // Two attempts now, so the worst case is twice the handshake timeout.
+        val budget = TelloController.HANDSHAKE_TIMEOUT_MS * 2 +
+            TelloController.HANDSHAKE_RETRY_DELAY_MS + 3_000
+        val connected = withTimeout(budget) { controller.connect() }
 
         assertFalse(connected)
         assertTrue(controller.connection.value is ConnectionState.Failed)

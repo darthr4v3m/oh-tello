@@ -34,32 +34,32 @@ against it. The log carries the build, the phone and the Android version in its 
 **Expect:** it replaces the old one without asking you to uninstall.
 *If Android refuses:* the installed copy predates the shared signing key. Uninstall once; this
 should not recur.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `installed over 0.1.0-pr1-b05f374, no uninstall needed`
 
 ### A2 — Launch and identify
 **Do:** open the app.
 **Expect:** dark screen; "Oh-Tello" with the version string beneath it; chip on the right reads
 **offline**; Take off / Land / Emergency at the **bottom**, not scrolling away; console says
 "Nothing sent yet."
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `version string matches the APK filename`
 
 ### A3 — Nothing is armed while offline
 **Do:** without connecting, try every control.
 **Expect:** only **Connect** responds. Take off, Land, Emergency, the D-pad and `battery?` are all
 greyed out. No telemetry warning is shown (there is nothing to be stale yet).
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `all flight controls greyed out while offline`
 
 ### A4 — Rotation is locked
 **Do:** turn the phone sideways.
 **Expect:** the screen stays portrait.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `stays portrait, no rotation offered`
 
 ### A5 — Connect fails cleanly when not on the drone's network
 **Do:** stay on your normal Wi-Fi (or mobile data only). Press **Connect**.
 **Expect:** after about 5 seconds the chip reads **failed** and a red line explains it. The console
 shows `no Wi-Fi network found …` or `no reply to `command` within 5s`. The app does not hang or
 crash.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `failed cleanly with the network hint, no crash`
 
 ### A6 — Connect for real
 **Do:** power the drone on, wait for the amber blink, join `TELLO-XXXXXX` in Android Wi-Fi
@@ -77,30 +77,30 @@ Chip turns green, reads **connected**.
 **This is the single most important line:** `socket bound to the Wi-Fi network`. If it says
 `no Wi-Fi network found` or `socket left on the default network` and the connect still worked, note
 it — it means the binding is not doing its job and it will fail on some other phone.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `connected; drone's own auto-land took 30-45s, not 15s - see B13`
 
 ### A7 — Notification permission is asked at the right moment
 **Do:** watch for the permission prompt (first connect only, Android 13+).
 **Expect:** Android asks for notification permission **on connecting**, not at launch. Allow it.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `notification appeared on backgrounding`
 
 ### A8 — Query round trip
 **Do:** tap `battery?`.
 **Expect:** `→ battery?` then `← 87` (or whatever the level is). The number matches the battery
 readout.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `battery? returned 72`
 
 ### A9 — Telemetry is live
 **Do:** watch the telemetry row and the raw line beneath it for 10 seconds.
 **Expect:** battery, height (0 cm), tof and flight time populate; the raw `pitch:…;bat:…;` line
 updates continuously. No "No state packet" warning.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `telemetry and battery? agree`
 
 ### A10 — Keepalive is running
 **Do:** turn the **keepalives** switch on in the console; wait 15 seconds.
 **Expect:** a dimmed `→ command` / `← ok` pair roughly every 5 seconds. Turn the switch back off
 and they disappear from the view.
-- [ ] Pass — notes: `______________________`
+- [ ] Pass — notes: `NOT RUN - no result reported`
 
 ### A11 — Idle banner does NOT appear on the ground
 **Do:** with the drone connected and sitting on the table, touch nothing for 20 seconds.
@@ -110,19 +110,19 @@ reports height 0.
 **The airborne half of this is B8** — that is where the banner should appear, and where tapping a
 direction must clear it. The keepalives must never clear it, which is why the idle clock counts
 only commands you send.
-- [ ] Pass — notes: `______________________`
+- [ ] Pass — notes: `failed on b05f374 (banner shown on the table); fixed in 00837e5, NOT re-run`
 
 ### A12 — Backgrounding on the ground does NOT nag
 **Do:** with the drone connected and sitting on the floor, press Home. Wait 10 seconds.
 **Expect:** **no** notification — telemetry says height 0, so there is nothing to warn about.
 Reopen the app: the console shows the keepalive stopped and resumed.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `no notification; console showed keepalive stopped then resumed`
 
 ### A13 — Movement is rejected on the ground
 **Do:** tap **forward**.
 **Expect:** `→ forward 30` and then an error from the drone (`← error Not joystick`, `← error Auto
 land` or similar) shown in red. The app stays responsive.
-- [ ] Pass — notes: `______________________`
+- [ ] Pass — notes: `NOT RUN - no result reported`
 
 ### A14 — Emergency reaches the drone
 **Do:** tap **Emergency stop** once, then again within 3 seconds.
@@ -130,13 +130,13 @@ land` or similar) shown in red. The app stays responsive.
 `→ emergency (jumped the queue, 1/3)`, `2/3`, `3/3`. Three copies is deliberate — one lost packet
 must not lose the command.
 **Also:** tap it once and wait 4 seconds without a second tap — the label reverts, nothing is sent.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `label reverted, three emergency lines sent`
 
 ### A15 — Back is guarded
 **Do:** with the drone connected, swipe back (or press back).
 **Expect:** a dialog, *"The drone may still be flying"*, offering **Land, then quit** and **Quit
 anyway**. Dismiss it; the app stays open and connected.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `dialog appeared and dismissed`
 
 ### A16 — Link loss is noticed
 **Do:** with the app connected and the screen in the foreground, **power the drone off**. Watch for
@@ -146,18 +146,29 @@ anyway**. Dismiss it; the app stays open and connected.
 app does not sit there claiming to be connected.
 **Note:** powering the drone off takes its Wi-Fi access point with it, so the keepalive may fail with
 `could not send` rather than timing out — both count towards the two strikes that end the link.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `on a9bdfb4: timeout then ENETUNREACH, link lost after 5.5s (failed on b05f374)`
 
 ### A17 — Reconnect after a drop
 **Do:** power the drone back on, rejoin its Wi-Fi if needed, press **Connect**.
 **Expect:** it connects normally. No app restart needed.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `Disconnect then Connect returned to green, buttons updated`
 
 ### A18 — Logs survive and can be shared
 **Do:** force-stop the app (or swipe it from recents), reopen it, tap **Share** in the console.
 **Expect:** a share sheet with the whole log as text. It contains **the previous session too**,
 each headed with build/phone/Android. Send it to yourself — that is the artefact to attach to a bug
 report.
+- [x] Pass — notes: `previous sessions still present, share sheet opened`
+
+### A19 — The first connect of a session works
+**Do:** power the drone **fully off and on again**, join its Wi-Fi, and press **Connect** exactly
+once. Do not press it twice. Repeat the whole thing three times, from a cold drone each time.
+**Expect:** it connects on the first press, all three times.
+**Note:** the drone also emits binary packets on the command port, and one arriving in the
+handshake window used to be read as the reply and fail the connect. Those are now ignored and
+logged as `ignored a non-SDK packet on the command port: cc …`, and the handshake gets one retry.
+Seeing that line followed by `handshake did not take, trying once more` and then `SDK mode entered`
+is a **pass** — the junk was handled. Seeing the connect fail is not.
 - [ ] Pass — notes: `______________________`
 
 ---

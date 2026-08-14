@@ -35,6 +35,14 @@ class FakeDrone(
     @Volatile
     var responder: (String) -> String? = { "ok" }
 
+    /**
+     * Replies with raw bytes instead of text, for the binary packets a real
+     * Tello also emits on the command port. Wins over [responder] whenever it
+     * returns something.
+     */
+    @Volatile
+    var rawResponder: (String) -> ByteArray? = { null }
+
     private val started = CountDownLatch(1)
     private var thread: Thread? = null
 
@@ -53,8 +61,9 @@ class FakeDrone(
                 received += command
                 receivedAtMillis += System.currentTimeMillis()
 
-                val reply = responder(command) ?: continue
-                val payload = reply.toByteArray(Charsets.US_ASCII)
+                val payload = rawResponder(command)
+                    ?: responder(command)?.toByteArray(Charsets.US_ASCII)
+                    ?: continue
                 try {
                     socket.send(DatagramPacket(payload, payload.size, packet.address, packet.port))
                 } catch (e: SocketException) {

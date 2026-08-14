@@ -76,6 +76,46 @@ fun parseTelloResponse(raw: String): TelloResponse {
     }
 }
 
+/**
+ * Whether a datagram off the command port is plausibly an SDK reply at all.
+ *
+ * Port 8889 does not only carry SDK text. The Tello also speaks a binary
+ * protocol on it — packets that start `cc` — and a freshly powered drone has
+ * been seen pushing one at the phone before it answers the handshake. Decoded
+ * as ASCII that is mojibake, and taken as the reply to `command` it fails the
+ * connection outright with a line of question marks.
+ *
+ * Every SDK reply is printable ASCII, optionally with line endings and NUL
+ * padding, so a single byte outside that range rules the packet out. Requiring
+ * one printable character also rejects a datagram that is nothing but padding.
+ */
+fun looksLikeSdkReply(bytes: ByteArray, offset: Int, length: Int): Boolean {
+    var printable = 0
+    for (index in offset until offset + length) {
+        when (bytes[index].toInt() and 0xFF) {
+            0, 0x09, 0x0A, 0x0D -> Unit // NUL padding, tab, CR, LF
+            in 0x20..0x7E -> printable++
+            else -> return false
+        }
+    }
+    return printable > 0
+}
+
+/**
+ * Renders a datagram as hex for the console. Logging bytes that are not text
+ * as if they were prints question marks and loses the evidence; the first few
+ * bytes are what identify the packet.
+ */
+fun hexPreview(bytes: ByteArray, offset: Int, length: Int, maxBytes: Int = HEX_PREVIEW_BYTES): String {
+    val shown = minOf(length, maxBytes)
+    val hex = (offset until offset + shown).joinToString(" ") {
+        (bytes[it].toInt() and 0xFF).toString(16).padStart(2, '0')
+    }
+    return if (shown < length) "$hex … ($length bytes)" else hex
+}
+
+private const val HEX_PREVIEW_BYTES = 16
+
 private val FAILURE_PREFIXES = listOf(
     "unknown command",
     "out of range",

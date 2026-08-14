@@ -5,6 +5,8 @@ import io.github.darthr4v3m.ohtello.tello.protocol.TelloCommands
 import io.github.darthr4v3m.ohtello.tello.protocol.TelloResponse
 import io.github.darthr4v3m.ohtello.tello.protocol.TelloState
 import io.github.darthr4v3m.ohtello.tello.protocol.TurnDirection
+import io.github.darthr4v3m.ohtello.tello.protocol.hexPreview
+import io.github.darthr4v3m.ohtello.tello.protocol.looksLikeSdkReply
 import io.github.darthr4v3m.ohtello.tello.protocol.parseTelloResponse
 import io.github.darthr4v3m.ohtello.tello.protocol.parseTelloState
 import kotlinx.coroutines.CoroutineDispatcher
@@ -145,7 +147,20 @@ class TelloController(
             return@withContext failConnection(describeOpenFailure(e))
         }
 
-        when (val response = sendCommand(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS)) {
+        // A drone that has just been powered on does not reliably take the first
+        // `command` of a session — the first datagram can go missing, or come
+        // back as something that is not an SDK reply at all. Pressing Connect a
+        // second time is the manual version of this, so do it here instead of
+        // asking the pilot to. One extra try, not a retry loop: past two the
+        // problem is not flakiness, it is the wrong Wi-Fi network.
+        var response = sendCommand(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS)
+        if (response !is TelloResponse.Ok) {
+            log(CommandLogEntry.Kind.INFO, "handshake did not take, trying once more")
+            delay(HANDSHAKE_RETRY_DELAY_MS)
+            response = sendCommand(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS)
+        }
+
+        when (response) {
             is TelloResponse.Ok -> {
                 _connection.value = ConnectionState.Connected
                 lastPilotCommandAtMillis = clock()
@@ -154,7 +169,7 @@ class TelloController(
                 true
             }
 
-            is TelloResponse.Timeout -> failConnection(
+            is TelloResponse.Timeout, is TelloResponse.Unreachable -> failConnection(
                 "no reply to `command` — check the phone is joined to the drone's " +
                     "TELLO-XXXXXX network and the drone is powered on",
             )
@@ -347,6 +362,17 @@ class TelloController(
             } catch (e: IOException) {
                 // Expected on disconnect: closing the socket is how we stop this loop.
                 return
+            }
+            // Not everything arriving here is an SDK reply: the drone also emits
+            // binary packets on this port. Letting one into the queue means the
+            // next command waiting for a reply reads it as its own.
+            if (!looksLikeSdkReply(packet.data, packet.offset, packet.length)) {
+                log(
+                    CommandLogEntry.Kind.INFO,
+                    "ignored a non-SDK packet on the command port: " +
+                        hexPreview(packet.data, packet.offset, packet.length),
+                )
+                continue
             }
             val text = String(packet.data, packet.offset, packet.length, Charsets.US_ASCII)
             replies.trySend(text)
@@ -570,6 +596,9 @@ class TelloController(
 
         /** Short: if the drone is not there, saying so quickly is the useful answer. */
         const val HANDSHAKE_TIMEOUT_MS = 5_000L
+
+        /** Long enough for a just-booted drone to settle, short enough not to feel stuck. */
+        const val HANDSHAKE_RETRY_DELAY_MS = 500L
 
         /** Telemetry arrives ~10x/sec, so 2s of silence means something is wrong. */
         const val STALE_TELEMETRY_MS = 2_000L
