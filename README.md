@@ -284,7 +284,9 @@ drone behaves. First real-drone smoke test, props off:
 3. Watch the telemetry row update, then walk out of range and confirm the status chip flips to
    "no telemetry".
 
-Emulators cannot test any of this; it needs real Wi-Fi and a real drone.
+Emulators cannot test any of this; it needs real Wi-Fi and a real drone. [docs/UAT.md](docs/UAT.md)
+is a full run-through for a phone and a drone — bench tests with the propellers off first, then the
+flying ones.
 
 ### When something goes wrong in the air
 
