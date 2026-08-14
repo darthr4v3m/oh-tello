@@ -1,10 +1,14 @@
 package io.github.darthr4v3m.ohtello.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +84,7 @@ fun TelloScreen(
     val turnDegrees by viewModel.turnDegrees.collectAsStateWithLifecycle()
     val showKeepAlives by viewModel.showKeepAlives.collectAsStateWithLifecycle()
     val emergencyArmed by viewModel.emergencyArmed.collectAsStateWithLifecycle()
+    val pilotIdle by viewModel.pilotIdle.collectAsStateWithLifecycle()
 
     val connected = connection is ConnectionState.Connected
     val canFly = connected && !busy
@@ -89,6 +94,21 @@ fun TelloScreen(
     // and the drone puts itself down rather than hovering unattended.
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.setOperatorPresent(true) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.setOperatorPresent(false) }
+
+    // Asked on connecting rather than at launch: at that moment the warning it
+    // enables — the drone is about to land itself — is about to become relevant,
+    // which is the only context in which the request makes sense.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* Denied is survivable: the in-app banner still works. */ }
+    LaunchedEffect(connected) {
+        if (connected &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !viewModel.canNotify()
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     var quitPrompt by rememberSaveable { mutableStateOf(false) }
     val activity = LocalContext.current.findActivity()
@@ -159,6 +179,8 @@ fun TelloScreen(
             )
         }
 
+        if (pilotIdle) IdleWarning()
+
         // Outside the scroll on purpose. Land and Emergency are the controls you
         // reach for when something is going wrong, and scrolling to find them is
         // not acceptable then — nor is having them at the top, out of thumb reach.
@@ -185,6 +207,30 @@ private fun Context.findActivity(): Activity? {
         context = context.baseContext
     }
     return null
+}
+
+/**
+ * Shown when the pilot has sent nothing for nearly the drone's failsafe window.
+ * Nothing is broken — the point is that the drone is hovering on borrowed time,
+ * and the app being in front of you is the only reason it still is.
+ */
+@Composable
+private fun IdleWarning() {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Text(
+            text = "Hovering — no command for a while. Leave the app and the drone lands itself " +
+                "within about 15 seconds.",
+            modifier = Modifier.padding(12.dp),
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 @Composable

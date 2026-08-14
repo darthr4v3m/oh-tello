@@ -37,6 +37,8 @@ class TelloControllerTest {
                 localCommandPort = localPort,
                 statePort = statePort,
             ),
+            // Shortened from twelve seconds so the idle tests are not a coffee break.
+            idleWarningMillis = IDLE_WARNING_MS,
         )
     }
 
@@ -267,12 +269,61 @@ class TelloControllerTest {
         }
     }
 
+    @Test
+    fun `going quiet raises the idle warning, and acting clears it`() = runBlocking {
+        assertTrue(controller.connect())
+        assertFalse("connecting counts as activity", controller.pilotIdle.value)
+
+        awaitIdle(true)
+
+        controller.move(MoveDirection.UP, 30)
+        awaitIdle(false)
+    }
+
+    @Test
+    fun `the keepalive does not count as pilot activity`() = runBlocking {
+        assertTrue(controller.connect())
+
+        // The keepalive talks to the drone every few seconds. If it reset the
+        // idle clock the warning could never fire, which is the whole point of
+        // measuring pilot commands rather than commands.
+        awaitIdle(true)
+        val keepalives = controller.log.value.count { it.kind == CommandLogEntry.Kind.KEEPALIVE }
+
+        delay(TelloController.KEEPALIVE_INTERVAL_MS + 1_500)
+
+        assertTrue(
+            "no keepalive was sent during the wait, so this proves nothing",
+            controller.log.value.count { it.kind == CommandLogEntry.Kind.KEEPALIVE } > keepalives,
+        )
+        assertTrue("a keepalive cleared the idle warning", controller.pilotIdle.value)
+    }
+
+    @Test
+    fun `disconnecting drops the idle warning`() = runBlocking {
+        assertTrue(controller.connect())
+        awaitIdle(true)
+
+        controller.disconnect()
+
+        assertFalse(controller.pilotIdle.value)
+    }
+
+    private suspend fun awaitIdle(expected: Boolean) {
+        withTimeout(IDLE_WARNING_MS + 4_000) {
+            while (controller.pilotIdle.value != expected) delay(50)
+        }
+    }
+
     private companion object {
         /** How long the fake drone takes to answer a movement command. */
         const val REPLY_DELAY_MS = 300L
 
         /** Allowance for clock granularity on a loaded CI runner. */
         const val TIMING_SLACK_MS = 50L
+
+        /** The real one is twelve seconds; tests would rather not wait that long. */
+        const val IDLE_WARNING_MS = 1_500L
 
         /** A command the fake drone is deliberately slow to answer. */
         const val SLOW_REPLY_MS = 1_500L

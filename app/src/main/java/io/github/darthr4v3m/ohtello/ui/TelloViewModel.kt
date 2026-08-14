@@ -26,6 +26,8 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sessionLog = SessionLogStore(File(application.filesDir, "logs"))
 
+    private val notifier = FlightNotifier(application)
+
     private val controller = TelloController(
         socketBinder = WifiSocketBinder(application),
         sessionLog = sessionLog,
@@ -48,6 +50,9 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
     val telemetryFresh: StateFlow<Boolean> = controller.telemetryFresh
     val log: StateFlow<List<CommandLogEntry>> = controller.log
 
+    /** Raised when the pilot has sent nothing for nearly the drone's failsafe window. */
+    val pilotIdle: StateFlow<Boolean> = controller.pilotIdle
+
     /** True while a command is in flight, so the UI can grey out the D-pad. */
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -66,6 +71,7 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
     val emergencyArmed: StateFlow<Boolean> = _emergencyArmed.asStateFlow()
 
     private var disarmJob: Job? = null
+    private var warnJob: Job? = null
 
     fun connect() = runExclusively { controller.connect() }
 
@@ -87,8 +93,32 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { controller.land() }
     }
 
-    /** Called as the app comes and goes; see TelloController.setOperatorPresent. */
-    fun setOperatorPresent(present: Boolean) = controller.setOperatorPresent(present)
+    /**
+     * Called as the app comes and goes; see TelloController.setOperatorPresent.
+     *
+     * Backgrounding stops the keepalive, so the drone lands itself about ten
+     * seconds later. If it is airborne when that happens, say so — and it has to
+     * be a notification, because by definition nobody is looking at the screen.
+     */
+    fun setOperatorPresent(present: Boolean) {
+        controller.setOperatorPresent(present)
+
+        warnJob?.cancel()
+        if (present) {
+            notifier.clear()
+            return
+        }
+        if (controller.connection.value !is ConnectionState.Connected) return
+        // Height reads 0 on the ground, so a drone sitting there earns no
+        // warning. Unknown height does: better a needless nudge than silence.
+        val height = controller.state.value?.heightCm
+        if (height != null && height <= 0) return
+
+        warnJob = viewModelScope.launch {
+            delay(BACKGROUND_WARNING_DELAY_MS)
+            notifier.warnDroneWillLand()
+        }
+    }
 
     /** Land, then let the caller finish the activity — used by the back gesture. */
     fun landThen(onDone: () -> Unit) {
@@ -162,7 +192,11 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** True once the app may post the background warning. */
+    fun canNotify(): Boolean = notifier.canNotify()
+
     override fun onCleared() {
+        notifier.clear()
         controller.disconnect()
         super.onCleared()
     }
@@ -171,6 +205,13 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
         const val DEFAULT_STEP_CM = 30
         const val DEFAULT_TURN_DEGREES = 45
         private const val EMERGENCY_ARM_WINDOW_MS = 3_000L
+
+        /**
+         * Long enough that flicking to another app and straight back does not
+         * fire it, short enough to still be a warning: the drone lands about ten
+         * seconds after the app goes away.
+         */
+        private const val BACKGROUND_WARNING_DELAY_MS = 2_000L
 
         val STEP_OPTIONS_CM = listOf(20, 30, 50, 100)
         val TURN_OPTIONS_DEGREES = listOf(30, 45, 90, 180)

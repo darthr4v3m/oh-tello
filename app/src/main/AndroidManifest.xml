@@ -11,6 +11,13 @@
         we only look at the network the user already joined.
     -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+        For one notification: the app was backgrounded with the drone airborne,
+        so the keepalive stopped and the drone is about to land itself. That
+        warning has to reach someone who is not looking at the screen. Nothing
+        runs in the background to produce it — no service, no alarm, no wakelock.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"

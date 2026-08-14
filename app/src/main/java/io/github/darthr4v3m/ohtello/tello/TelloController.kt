@@ -65,6 +65,8 @@ class TelloController(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Mirrors the console to disk so a bad connection can be read back later. */
     private val sessionLog: SessionLogStore? = null,
+    /** How long without a pilot command before [pilotIdle] is raised. */
+    private val idleWarningMillis: Long = IDLE_WARNING_MS,
 ) {
 
     private val _connection = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -84,6 +86,17 @@ class TelloController(
     private val _log = MutableStateFlow<List<CommandLogEntry>>(emptyList())
     val log: StateFlow<List<CommandLogEntry>> = _log.asStateFlow()
 
+    /**
+     * True once the pilot has sent nothing for [idleWarningMillis], which is
+     * just short of the drone's own 15s auto-land timer.
+     *
+     * Nothing is wrong when this is set — the keepalive is holding the drone up
+     * and it will hover indefinitely. It is a reminder that the only thing
+     * keeping it there is this app being in front of you.
+     */
+    private val _pilotIdle = MutableStateFlow(false)
+    val pilotIdle: StateFlow<Boolean> = _pilotIdle.asStateFlow()
+
     private val commandMutex = Mutex()
     private val logIds = AtomicLong(0)
 
@@ -92,6 +105,7 @@ class TelloController(
     @Volatile private var controllerScope: CoroutineScope? = null
     @Volatile private var replies: Channel<String> = Channel(Channel.UNLIMITED)
     @Volatile private var lastCommandAtMillis: Long = 0
+    @Volatile private var lastPilotCommandAtMillis: Long = 0
     @Volatile private var operatorPresent: Boolean = true
     @Volatile private var lastStateAtMillis: Long = 0
 
@@ -132,6 +146,7 @@ class TelloController(
         when (val response = sendCommand(TelloCommands.ENTER_SDK_MODE, HANDSHAKE_TIMEOUT_MS)) {
             is TelloResponse.Ok -> {
                 _connection.value = ConnectionState.Connected
+                lastPilotCommandAtMillis = clock()
                 log(CommandLogEntry.Kind.INFO, "SDK mode entered")
                 scope.launch { sendKeepAlives() }
                 true
@@ -236,6 +251,7 @@ class TelloController(
                 try {
                     writeDatagram(socket, command)
                     lastCommandAtMillis = clock()
+                    lastPilotCommandAtMillis = clock()
                     val note = if (attempts > 1) " (jumped the queue, ${attempt + 1}/$attempts)" else " (jumped the queue)"
                     log(CommandLogEntry.Kind.SENT, "→ $command$note")
                 } catch (e: IOException) {
@@ -265,6 +281,7 @@ class TelloController(
                 drainLateReplies()
                 log(kind, "→ $command")
                 lastCommandAtMillis = clock()
+                if (kind != CommandLogEntry.Kind.KEEPALIVE) lastPilotCommandAtMillis = clock()
 
                 try {
                     writeDatagram(socket, command)
@@ -355,6 +372,16 @@ class TelloController(
         while (currentCoroutineContext().isActive) {
             val last = lastStateAtMillis
             _telemetryFresh.value = last != 0L && clock() - last < STALE_TELEMETRY_MS
+
+            // Deliberately measured from the last *pilot* command, not the last
+            // command: the keepalive is talking to the drone every five seconds
+            // and would otherwise reset this forever, which is the opposite of
+            // what it is for.
+            val idleFor = clock() - lastPilotCommandAtMillis
+            _pilotIdle.value = _connection.value is ConnectionState.Connected &&
+                lastPilotCommandAtMillis != 0L &&
+                idleFor >= idleWarningMillis
+
             delay(FRESHNESS_TICK_MS)
         }
     }
@@ -482,6 +509,8 @@ class TelloController(
         _telemetryFresh.value = false
         lastStateAtMillis = 0
         lastCommandAtMillis = 0
+        lastPilotCommandAtMillis = 0
+        _pilotIdle.value = false
     }
 
     private fun log(kind: CommandLogEntry.Kind, text: String) {
@@ -529,6 +558,13 @@ class TelloController(
 
         /** Well inside the drone's 15s auto-land timer. */
         const val KEEPALIVE_INTERVAL_MS = 5_000L
+
+        /**
+         * Warn at twelve seconds of pilot silence. The drone's own timer is 15s
+         * from the last command of any kind, so this is the last moment a
+         * warning is still worth acting on.
+         */
+        const val IDLE_WARNING_MS = 12_000L
 
         /** Two silent keepalives, ~10s, still inside the drone's own 15s timer. */
         const val KEEPALIVE_FAILURES_BEFORE_GIVING_UP = 2
