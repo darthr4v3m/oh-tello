@@ -194,7 +194,7 @@ Keep the prop guards on for every development test flight.
 - **How long is "a while" is not settled.** The SDK documents 15 seconds from the last command. A
   session log from 14 August 2026 shows the drone answering normally after **23.2 seconds** of
   total silence, and the pilot watching it reported a landing somewhere past 30. Note that a
-  landed Tello still answers `ok`, so the log bounds the link, not the flight. Test B14 measures
+  landed Tello still answers `ok`, so the log bounds the link, not the flight. Test B13 measures
   it properly; until then the app deliberately says "shortly" rather than a number it cannot
   stand behind.
 - Two warnings come with that. **Twelve seconds without a command from you**, with the app in
