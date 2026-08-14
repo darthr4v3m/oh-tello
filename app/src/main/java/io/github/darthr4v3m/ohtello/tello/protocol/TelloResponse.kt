@@ -25,7 +25,26 @@ sealed interface TelloResponse {
         override val raw: String = ""
     }
 
+    /**
+     * The command never left the phone — no socket, or the write itself failed.
+     *
+     * Distinct from [Failure] on purpose. "The drone said no" means the link is
+     * alive; "I could not reach the drone" means it may well be gone. Powering
+     * the drone off takes its access point with it, and the socket is pinned to
+     * that network, so a dead link shows up here rather than as a timeout.
+     */
+    data class Unreachable(val message: String) : TelloResponse {
+        override val raw: String = ""
+    }
+
     val isSuccess: Boolean get() = this is Ok || this is Value
+
+    /**
+     * Whether the drone was heard from at all. False for both a timeout and an
+     * unreachable link; true even for a rejection, since a drone that says
+     * `error` is a drone that is still there.
+     */
+    val heardFromDrone: Boolean get() = this !is Timeout && this !is Unreachable
 }
 
 /**

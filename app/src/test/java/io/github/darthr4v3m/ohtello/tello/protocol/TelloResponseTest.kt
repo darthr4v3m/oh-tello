@@ -81,4 +81,20 @@ class TelloResponseTest {
         assertEquals("", TelloResponse.Timeout.raw)
         assertFalse(TelloResponse.Timeout.isSuccess)
     }
+
+    @Test
+    fun `a rejection still counts as having heard from the drone`() {
+        // This is the distinction the link-loss detector runs on. A drone that
+        // says `error` is a drone that is still there; a send that never left
+        // the phone is the opposite, however much it looks like a failure.
+        assertTrue(parseTelloResponse("ok").heardFromDrone)
+        assertTrue(parseTelloResponse("87").heardFromDrone)
+        assertTrue(parseTelloResponse("error Motor stop").heardFromDrone)
+        assertTrue(parseTelloResponse("out of range").heardFromDrone)
+
+        assertFalse(TelloResponse.Timeout.heardFromDrone)
+        assertFalse(TelloResponse.Unreachable("no route to host").heardFromDrone)
+        assertFalse(TelloResponse.Unreachable("boom").isSuccess)
+        assertEquals("", TelloResponse.Unreachable("boom").raw)
+    }
 }

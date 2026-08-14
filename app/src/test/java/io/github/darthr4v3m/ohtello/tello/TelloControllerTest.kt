@@ -181,7 +181,10 @@ class TelloControllerTest {
     fun `commands sent while disconnected fail instead of throwing`() = runBlocking {
         val response = controller.move(MoveDirection.FORWARD, 30)
 
-        assertTrue(response is TelloResponse.Failure)
+        // Unreachable, not Failure: nothing left the phone, so this says nothing
+        // about whether the drone would have accepted it.
+        assertTrue(response is TelloResponse.Unreachable)
+        assertFalse(response.heardFromDrone)
         assertTrue(drone.received.isEmpty())
     }
 

@@ -139,9 +139,13 @@ anyway**. Dismiss it; the app stays open and connected.
 - [ ] Pass — notes: `______________________`
 
 ### A16 — Link loss is noticed
-**Do:** with the app connected, **power the drone off**. Watch for ~15 seconds.
+**Do:** with the app connected and the screen in the foreground, **power the drone off**. Watch for
+~20 seconds.
 **Expect:** the chip goes to "no telemetry" within about 2 seconds, then the connection fails with
-`link lost — the drone stopped answering…`. The app does not sit there claiming to be connected.
+`link lost — the drone stopped answering…`. The chip reads failed and **Disconnect** greys out. The
+app does not sit there claiming to be connected.
+**Note:** powering the drone off takes its Wi-Fi access point with it, so the keepalive may fail with
+`could not send` rather than timing out — both count towards the two strikes that end the link.
 - [ ] Pass — notes: `______________________`
 
 ### A17 — Reconnect after a drop

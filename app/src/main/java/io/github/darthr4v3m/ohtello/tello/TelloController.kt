@@ -290,7 +290,7 @@ class TelloController(
                 } catch (e: IOException) {
                     val message = "could not send `$command`: ${e.message ?: e.toString()}"
                     log(CommandLogEntry.Kind.ERROR, message)
-                    return@withLock TelloResponse.Failure("", message)
+                    return@withLock TelloResponse.Unreachable(message)
                 }
 
                 val raw = try {
@@ -404,7 +404,7 @@ class TelloController(
      * front of a command that is waiting for its reply.
      */
     private suspend fun sendKeepAlives() {
-        var consecutiveTimeouts = 0
+        var consecutiveFailures = 0
         while (currentCoroutineContext().isActive) {
             delay(FRESHNESS_TICK_MS)
             if (_connection.value !is ConnectionState.Connected) continue
@@ -422,12 +422,19 @@ class TelloController(
             // Nothing else ever moves the link out of Connected: a command that
             // fails logs an error and leaves the UI claiming all is well, and a
             // socket pinned to a Wi-Fi network that has gone away stays dead
-            // even after the phone rejoins. Two silent keepalives is ~10s, still
-            // inside the drone's own 15s timer, and tearing down here means the
-            // next Connect binds to the current network rather than the corpse.
-            if (response is TelloResponse.Timeout) {
-                consecutiveTimeouts++
-                if (consecutiveTimeouts >= KEEPALIVE_FAILURES_BEFORE_GIVING_UP) {
+            // even after the phone rejoins. Two bad keepalives is ~10s, and
+            // tearing down here means the next Connect binds to the current
+            // network rather than the corpse.
+            //
+            // A strike is "the drone was not heard from", not "the reply timed
+            // out". Powering the drone off takes its access point with it, and
+            // the socket is pinned to that network, so the send throws before
+            // anything leaves the phone — an outcome that is worse than silence,
+            // not better. Only a real answer, `ok` or `error` alike, clears the
+            // count: a drone that rejects a command is still a drone that is there.
+            if (!response.heardFromDrone) {
+                consecutiveFailures++
+                if (consecutiveFailures >= KEEPALIVE_FAILURES_BEFORE_GIVING_UP) {
                     failConnection(
                         "link lost — the drone stopped answering. Check the phone is still on " +
                             "the drone's Wi-Fi network, then connect again",
@@ -435,7 +442,7 @@ class TelloController(
                     return
                 }
             } else {
-                consecutiveTimeouts = 0
+                consecutiveFailures = 0
             }
         }
     }
@@ -503,7 +510,7 @@ class TelloController(
     private fun notConnected(command: String): TelloResponse {
         val message = "not connected — `$command` was not sent"
         log(CommandLogEntry.Kind.ERROR, message)
-        return TelloResponse.Failure("", message)
+        return TelloResponse.Unreachable(message)
     }
 
     private fun teardown() {
