@@ -89,9 +89,9 @@ fun TelloScreen(
     val connected = connection is ConnectionState.Connected
     val canFly = connected && !busy
 
-    // The keepalive is what stops the drone using its own 15s auto-land, so it
-    // only runs while someone is actually looking at the app. Pocket the phone
-    // and the drone puts itself down rather than hovering unattended.
+    // The keepalive is what stops the drone using its own auto-land, so it only
+    // runs while someone is actually looking at the app. Pocket the phone and
+    // the drone puts itself down rather than hovering unattended.
     LifecycleEventEffect(Lifecycle.Event.ON_START) { viewModel.setOperatorPresent(true) }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { viewModel.setOperatorPresent(false) }
 
@@ -225,8 +225,8 @@ private fun IdleWarning() {
         shape = RoundedCornerShape(8.dp),
     ) {
         Text(
-            text = "Hovering — no command for a while. Leave the app and the drone lands itself " +
-                "within about 15 seconds.",
+            text = "Hovering — no command for a while. Leave the app and the drone will land " +
+                "itself shortly after.",
             modifier = Modifier.padding(12.dp),
             style = MaterialTheme.typography.bodySmall,
         )
@@ -245,7 +245,7 @@ private fun QuitWhileConnectedDialog(
         text = {
             Text(
                 "Leaving closes the link. If the drone is airborne it will hover until its own " +
-                    "failsafe lands it, about 15 seconds later, wherever it happens to be.",
+                    "failsafe lands it, wherever it happens to be.",
             )
         },
         confirmButton = { TextButton(onClick = onLandAndQuit) { Text("Land, then quit") } },

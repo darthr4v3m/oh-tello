@@ -186,11 +186,17 @@ Keep the prop guards on for every development test flight.
 
 ### Safety notes
 
-- The drone auto-lands if it hears nothing for 15 seconds. The app sends an idle `command`
+- The drone auto-lands when it hears nothing for a while. The app sends an idle `command`
   keepalive every 5 seconds to prevent that **only while the app is in the foreground**. Lock the
-  phone, switch apps, or close it, and the keepalive stops: the drone lands itself 10–15 seconds
-  later, wherever it happens to be. That is deliberate — an unattended drone should come down — but
-  it also means glancing at another app mid-flight will land it.
+  phone, switch apps, or close it, and the keepalive stops: the drone lands itself shortly after,
+  wherever it happens to be. That is deliberate — an unattended drone should come down — but it
+  also means glancing at another app mid-flight will land it.
+- **How long is "a while" is not settled.** The SDK documents 15 seconds from the last command. A
+  session log from 14 August 2026 shows the drone answering normally after **23.2 seconds** of
+  total silence, and the pilot watching it reported a landing somewhere past 30. Note that a
+  landed Tello still answers `ok`, so the log bounds the link, not the flight. Test B14 measures
+  it properly; until then the app deliberately says "shortly" rather than a number it cannot
+  stand behind.
 - Two warnings come with that. **Twelve seconds without a command from you**, with the app in
   front of you, raises a banner above the flight controls: nothing is wrong, the drone is hovering,
   but this screen is the only reason it still is. **Backgrounding the app while the drone is

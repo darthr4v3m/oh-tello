@@ -233,6 +233,36 @@ lands itself on its own failsafe. Walk back, reconnect.
 **Caution:** do this over grass, and keep the drone in sight.
 - [ ] Pass — notes: `______________________`
 
+### B14 — How long is the drone's failsafe, really?
+
+Measuring the firmware, not the app. The SDK says the drone lands 15 seconds after the last
+command. On 14 August 2026 a session log showed it answering normally after **23.2 seconds** of
+silence, and the pilot watching it saw a landing somewhere past 30 — so the documented figure is
+not what this firmware does, and the app currently says "shortly" because it cannot honestly say a
+number.
+
+**Do:**
+1. Turn **keepalives** on in the console — you need to see the last one's timestamp.
+2. Take off, hover at about 1 m, over grass or a mat.
+3. Press Home **and start a stopwatch on the same press**.
+4. Watch the drone. Stop the watch the moment it **touches down**, not when it starts descending.
+5. Reopen the app, read the timestamp of the last `KEEPALIVE → command` before
+   `app backgrounded`, and the `app backgrounded` line itself.
+
+Do it twice — Tello firmware is not famously consistent.
+
+| Run | Last keepalive | `app backgrounded` at | Stopwatch to touchdown | Began descending at |
+| --- | --- | --- | --- | --- |
+| 1 | `________` | `________` | `______ s` | `______ s` |
+| 2 | `________` | `________` | `______ s` | `______ s` |
+
+**The number that matters** is touchdown minus the *last keepalive*, not minus the backgrounding —
+they can be up to 5 seconds apart, since the keepalive fires on its own cadence.
+
+*Note:* a landed Tello still answers `ok`, so the log alone cannot tell you when it stopped flying.
+That is why this test needs eyes and a stopwatch.
+- [ ] Done — result fed back into the app's wording
+
 ### B13 — Emergency cut (optional, do it last)
 **Only over grass or a mat, at 30–50 cm, with guards on. The drone will drop.**
 **Do:** hover low, tap Emergency twice.
@@ -259,7 +289,7 @@ lands itself on its own failsafe. Walk back, reconnect.
 
 | | |
 | --- | --- |
-| Tests passed | `____ / 33` |
+| Tests passed | `____ / 34` |
 | Blocking failures | `______________________` |
 | Ship it? | Yes / No |
 

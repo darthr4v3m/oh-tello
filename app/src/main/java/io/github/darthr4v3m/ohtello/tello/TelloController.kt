@@ -87,8 +87,10 @@ class TelloController(
     val log: StateFlow<List<CommandLogEntry>> = _log.asStateFlow()
 
     /**
-     * True once the pilot has sent nothing for [idleWarningMillis], which is
-     * just short of the drone's own 15s auto-land timer.
+     * True once the pilot has sent nothing for [idleWarningMillis], chosen to
+     * sit just inside the drone's own auto-land timer. The SDK documents that
+     * as 15s from the last command; a real drone was measured answering after
+     * 23s of silence, so treat the figure as a floor rather than a promise.
      *
      * Nothing is wrong when this is set — the keepalive is holding the drone up
      * and it will hover indefinitely. It is a reminder that the only thing
@@ -451,7 +453,7 @@ class TelloController(
             if (present) {
                 "app in the foreground — keepalive resumed"
             } else {
-                "app backgrounded — keepalive stopped, the drone will land itself in about 15s"
+                "app backgrounded — keepalive stopped, the drone will land itself shortly"
             },
         )
     }
