@@ -1,7 +1,6 @@
 package io.github.darthr4v3m.ohtello.ui
 
 import android.Manifest
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.app.NotificationCompat
 import io.github.darthr4v3m.ohtello.MainActivity
 import io.github.darthr4v3m.ohtello.R
 
@@ -47,11 +47,19 @@ class FlightNotifier(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val notification = Notification.Builder(context, CHANNEL_ID)
+        // NotificationCompat rather than Notification.Builder: the two-argument
+        // builder that takes a channel is API 26+, and this app runs from 24.
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("The drone is about to land itself")
-            .setContentText("Oh-Tello is in the background, so it stopped holding the drone up. Reopen to keep flying.")
-            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentText(
+                "Oh-Tello is in the background, so it stopped holding the drone up. " +
+                    "Reopen to keep flying.",
+            )
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            // Channel importance covers API 26+; this is what carries the same
+            // urgency on 24 and 25, where channels do not exist.
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setOngoing(false)
             .setContentIntent(reopen)
