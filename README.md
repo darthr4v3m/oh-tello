@@ -191,6 +191,16 @@ Keep the prop guards on for every development test flight.
   phone, switch apps, or close it, and the keepalive stops: the drone lands itself 10–15 seconds
   later, wherever it happens to be. That is deliberate — an unattended drone should come down — but
   it also means glancing at another app mid-flight will land it.
+- Two warnings come with that. **Twelve seconds without a command from you**, with the app in
+  front of you, raises a banner above the flight controls: nothing is wrong, the drone is hovering,
+  but this screen is the only reason it still is. **Backgrounding the app while the drone is
+  airborne** posts a notification instead, since by then you are not looking at the screen. The
+  banner counts commands *you* send — keepalives deliberately do not reset it, or it could never
+  fire.
+- The notification needs `POST_NOTIFICATIONS`, asked for the first time you connect rather than at
+  launch. Deny it and everything else still works; you lose that one warning. It is skipped when
+  telemetry says the drone is on the ground, and cancelled when you come back. Nothing runs in the
+  background to produce it — no service, no alarm, no wakelock.
 - Pressing back while connected asks first, and offers to land before leaving.
 - A command timeout does not stop the drone. It means the app stopped waiting for the reply, not
   that the drone stopped moving.
@@ -246,8 +256,9 @@ Both sockets are therefore pinned to the Wi-Fi network with `Network.bindSocket(
 needs `ACCESS_NETWORK_STATE`, and it is the difference between the app working and the app timing
 out on a phone with a SIM in it.
 
-Permissions used, in full: `INTERNET` (required for any socket, even a purely local one) and
-`ACCESS_NETWORK_STATE`. No location permission — the app never scans for networks, it only looks at
+Permissions used, in full: `INTERNET` (required for any socket, even a purely local one),
+`ACCESS_NETWORK_STATE`, and `POST_NOTIFICATIONS` for the one warning described in
+[Safety notes](#safety-notes). No location permission — the app never scans for networks, it only looks at
 the one you already joined.
 
 ## Testing
