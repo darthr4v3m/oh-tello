@@ -80,10 +80,24 @@ fun parseTelloResponse(raw: String): TelloResponse {
  * Whether a datagram off the command port is plausibly an SDK reply at all.
  *
  * Port 8889 does not only carry SDK text. The Tello also speaks a binary
- * protocol on it — packets that start `cc` — and a freshly powered drone has
- * been seen pushing one at the phone before it answers the handshake. Decoded
- * as ASCII that is mojibake, and taken as the reply to `command` it fails the
- * connection outright with a line of question marks.
+ * protocol on it — the one the official app uses — and emits those packets at
+ * the phone alongside the SDK. Decoded as ASCII that is mojibake, and taken as
+ * the reply to `command` it fails the connection outright with a line of
+ * question marks.
+ *
+ * Captured from a real Tello during a connect, 35 bytes:
+ * ```
+ * cc 18 01 b9 88 56 00 e1 00 ...
+ * ^  ^^^^^ ^^ ^^ ^^^^^ ^^^^^
+ * |  |     |  |  |     sequence number, 225 — it had been sending these a while
+ * |  |     |  |  message id 0x0056, the flight-data message
+ * |  |     |  packet type
+ * |  |     header CRC
+ * |  length in *bits*, little endian: 0x0118 = 280, and 280/8 = 35 bytes
+ * magic
+ * ```
+ * That one landed 33ms after `command`, three milliseconds ahead of the real
+ * `ok` — close enough to be read as the reply, which is exactly what happened.
  *
  * Every SDK reply is printable ASCII, optionally with line endings and NUL
  * padding, so a single byte outside that range rules the packet out. Requiring

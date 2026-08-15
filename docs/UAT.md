@@ -14,32 +14,22 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-Part A is fifteen of nineteen done, on the bench. What is left, in the order to do it:
+**Part A is complete — 19 of 19, on the bench.** What is left is Part B, all fourteen checks, and
+every one of them needs the motors spinning and about 3 × 3 m of clear space.
 
-| Test | What | Needs |
-| --- | --- | --- |
-| **A19** | Cold first connect, three times, one press each | drone powered on |
-| **A10** | Keepalive toggle shows a pair every ~5s | drone connected |
-| **A13** | `forward` on the ground is rejected by the drone | drone connected |
-| **A11** | Idle banner does **not** appear on the table | drone connected, 20s of patience |
-| **Part B** | All fourteen | **motors spinning**, 3 × 3 m clear |
+The two that carry the most weight, so they are not left to last by accident:
 
-Run all four Part A checks on the same build, in one sitting — they need nothing but a connected
-drone on a table, about five minutes in total.
+- **B9** — background the app while the drone is flying. This is the mandate the whole keepalive
+  design exists to serve, and the only test that proves the drone lands itself when the pilot walks
+  away.
+- **B13** — stopwatch the failsafe. The SDK says the drone auto-lands after 15 seconds of silence.
+  It does not: a log on 13 Aug showed it still answering at 23.2 s, and the drone was seen putting
+  itself down somewhere past 30 s. Every number in the app's wording was removed because of that,
+  and B13 is what replaces guesswork with a measurement.
 
-Why these four are open:
-
-- **A19** is new. It covers the binary-packet handshake failure found on 14 Aug and fixed in
-  `a0b17b9`. It has never been run.
-- **A10** and **A13** were never reported — an oversight during the first pass, not a failure.
-- **A11** *failed* on build `b05f374`: the idle banner appeared with the drone sitting on the
-  table. Fixed in `00837e5` by gating the banner on telemetry height. **The fix has not been
-  verified on a real drone** — it is only covered by unit tests, so this one is a genuine
-  outstanding risk, not paperwork.
-
-Everything ticked in Part A below was run on `b05f374` except A16 and A18, which were run on
-`a9bdfb4`. Three fixes landed between those builds; none touched the earlier tests' behaviour, but
-they were not re-run.
+Which build each Part A result came from: A1–A9, A12, A14–A15 and A17 on `b05f374`; A16 and A18 on
+`a9bdfb4`; A10, A11, A13 and A19 on `c882619`. Fixes landed between those builds, but none changed
+behaviour an earlier test covered.
 
 **Build to test against:** the newest APK linked from PR #1 — the comment there always points at
 the latest one. Write the version string it shows under the app title into the box above, so a
@@ -135,7 +125,7 @@ updates continuously. No "No state packet" warning.
 **Do:** turn the **keepalives** switch on in the console; wait 15 seconds.
 **Expect:** a dimmed `→ command` / `← ok` pair roughly every 5 seconds. Turn the switch back off
 and they disappear from the view.
-- [ ] Pass — notes: `NOT RUN - no result reported`
+- [x] Pass — notes: `dimmed pairs every ~5s, gone from view when switched off`
 
 ### A11 — Idle banner does NOT appear on the ground
 **Do:** with the drone connected and sitting on the table, touch nothing for 20 seconds.
@@ -145,7 +135,7 @@ reports height 0.
 **The airborne half of this is B8** — that is where the banner should appear, and where tapping a
 direction must clear it. The keepalives must never clear it, which is why the idle clock counts
 only commands you send.
-- [ ] Pass — notes: `failed on b05f374 (banner shown on the table); fixed in 00837e5, NOT re-run`
+- [x] Pass — notes: `no banner after 20s on the table - verifies the 00837e5 fix`
 
 ### A12 — Backgrounding on the ground does NOT nag
 **Do:** with the drone connected and sitting on the floor, press Home. Wait 10 seconds.
@@ -157,7 +147,7 @@ Reopen the app: the console shows the keepalive stopped and resumed.
 **Do:** tap **forward**.
 **Expect:** `→ forward 30` and then an error from the drone (`← error Not joystick`, `← error Auto
 land` or similar) shown in red. The app stays responsive.
-- [ ] Pass — notes: `NOT RUN - no result reported`
+- [x] Pass — notes: `forward 30 rejected with `error Motor stop``
 
 ### A14 — Emergency reaches the drone
 **Do:** tap **Emergency stop** once, then again within 3 seconds.
@@ -204,7 +194,7 @@ handshake window used to be read as the reply and fail the connect. Those are no
 logged as `ignored a non-SDK packet on the command port: cc …`, and the handshake gets one retry.
 Seeing that line followed by `handshake did not take, trying once more` and then `SDK mode entered`
 is a **pass** — the junk was handled. Seeing the connect fail is not.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `three cold cycles, three first-press connects; run 3 filtered a cc packet`
 
 ---
 
