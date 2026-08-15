@@ -412,6 +412,12 @@ class TelloController(
             // to ignore the warning. Same rule as the background notification:
             // silent only when telemetry actually says it is down, since an
             // unknown height is better warned about than assumed safe.
+            //
+            // `h` is barometric and reads low — measured at 40 against a real
+            // 80cm, while `tof` read 76 — so the margin here is about half what
+            // it looks. It holds at a normal 80-100cm hover, where `h` sits at
+            // 40-50; a hover low enough for `h` to read 0 would go unwarned.
+            // See the roadmap note in the README before tightening this.
             val onTheGround = _state.value?.heightCm?.let { it <= 0 } == true
 
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&

@@ -329,18 +329,51 @@ values used here.
   proven solid over a few real flights.
 - Flips, mission pads, and the EDU-only commands. Deliberately out of v1.
 
-### If connecting proves flaky
+### Why the first connect used to fail — solved
 
-Connect has been seen to fail once and then work on a second press. Two plausible causes: the
-Wi-Fi lookup running before Android has finished associating with the drone's network, leaving the
-sockets on mobile data; or the drone dropping the very first `command` after power-up, which
-`djitellopy` retries for the same reason.
+Connect would sometimes fail on the first press and work on the second. The suspects were the
+Wi-Fi lookup racing Android's association, or the drone dropping the first `command`. It was
+neither.
 
-One fix covers both — retry the handshake a few times with a backoff, redoing the socket binding on
-each attempt rather than reusing the first one's. A later attempt then finds the Wi-Fi network once
-it exists, and also resends a command that was dropped.
+Port 8889 carries more than SDK text. The Tello also speaks the binary protocol its official app
+uses, and pushes those packets at the phone unprompted. One landing inside the handshake window was
+read as the reply to `command`, decoded to mojibake, and failed the connect outright. Caught in the
+act during UAT:
 
-Not implemented: it has happened once, and the session logs now record which of the two it was
-(`udp/8889: socket bound to the Wi-Fi network` against `no Wi-Fi network found`). Worth doing if it
-recurs, and worth knowing which cause it is first — the backoff and attempt count should be chosen
-from what the logs show, not guessed.
+```
+13:24:41.104  → command
+13:24:41.137  ignored a non-SDK packet on the command port: cc 18 01 b9 88 56 00 e1 ... (35 bytes)
+13:24:41.140  ← ok
+```
+
+`cc` magic, a length in bits (`0x0118` = 280, so 35 bytes, matching), a header CRC, a packet type,
+and message id `0x0056` — the flight-data message — at sequence 225. It arrived 33 ms after the
+command and three milliseconds ahead of the real `ok`.
+
+Fixed by filtering the reply queue to datagrams that are plausibly SDK replies, and giving the
+handshake a single retry as a belt-and-braces measure. The full backoff-and-rebind strategy
+described here previously was never needed.
+
+### Height telemetry: `h` is not the number to trust
+
+Measured on a real flight at roughly 80 cm:
+
+| field | reading | what it is |
+| --- | --- | --- |
+| `h` | 40 | barometric height above the takeoff point |
+| `tof` | 76 | downward time-of-flight sensor, floors at 10 |
+| `baro` | delta of 0.79 between hover and ground | absolute pressure altitude |
+
+`tof` matches reality. So does the `baro` delta, if that field is in metres — the SDK documents it
+as centimetres, which would make the difference 0.79 cm and cannot be right. `h` reads about half
+the true height.
+
+That matters because the idle banner and the background notification both suppress themselves on
+`h <= 0`. The gate holds at a normal 80–100 cm hover, where `h` sits at 40–50, but a hover low
+enough for `h` to read 0 would go unwarned.
+
+Not implemented, deliberately: the hardening is one condition — airborne if `h > 0` **or**
+`tof > 15`. Ten is the ground reading, so fifteen clears it, and a real hover puts `tof` in the
+seventies; a drone on a table still reads 10, so it cannot bring back the false banner that was
+fixed in `00837e5`. Worth doing, but it changes flight-safety logic and should land with its own
+tests and its own pass through the UAT rather than being slipped in mid-run.

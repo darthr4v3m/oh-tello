@@ -14,8 +14,12 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is complete — 20 of 20, on the bench.** Everything left is Part B, all fourteen checks,
-every one of them needing the motors spinning and about 3 × 3 m of clear space.
+**Part A is complete — 20 of 20.** Part B is **paused after B2**: twelve checks left, every one of
+them needing the motors spinning and about 3 × 3 m of clear space. **Resume at B3.**
+
+B2 turned up something worth carrying forward: the `h` field reads about half the true height, and
+the idle banner and the background notification both key off it. Not a failure and not fixed — the
+reasoning and the one-line hardening are written up in the README under *Height telemetry*.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -219,12 +223,20 @@ Have a thumb near **Land** for all of these.
 **Do:** connect, press **TAKE OFF**. Let it hover. Press **LAND**.
 **Expect:** climbs to roughly 1 m and holds; console `→ takeoff` / `← ok`. Land brings it down
 under control; console `→ land (jumped the queue, 1/3)` and the height readout falls to 0.
-- [ ] Pass — notes: `______________________`
+**Note:** `takeoff` only answers `ok` once the drone is at hover, about 6 seconds. Land's own `ok`
+never appears as `← ok` — a priority command does not wait for its reply, so it turns up later
+as `discarded late reply: ok` when the next keepalive drains the queue. Correct, if ugly.
+- [x] Pass — notes: `off, steady hover, controlled landing; takeoff ok at 5.94s; land 3x at 154ms`
 
 ### B2 — Height telemetry is honest
-**Do:** take off again; compare the height readout to reality.
-**Expect:** roughly 80–120 cm, and it tracks up/down commands.
-- [ ] Pass — notes: `______________________`
+**Do:** take off again. Read **height**, **tof** and your own estimate of the real height at the
+same moment. Land, and read height and tof again.
+**Expect:** **tof** matches reality within a few cm. **height** does not — it is barometric and
+reads low, measured at 40 against a real 80. On the ground height reads 0 and tof reads 10; ten is
+the sensor's floor rather than a measurement, so read it as "on a surface".
+**A known quirk, not a failure.** What would be a failure: tof disagreeing with reality, or height
+failing to fall to 0 on landing. See the README, *Height telemetry*, for why it matters.
+- [x] Pass — notes: `h 40 / tof 76 / real ~80 hovering; h 0 / tof 10 landed; baro delta 0.79`
 
 ### B3 — Movement, all six directions
 **Do:** with 30 cm selected, press each of forward, back, left, right, then up and down.
