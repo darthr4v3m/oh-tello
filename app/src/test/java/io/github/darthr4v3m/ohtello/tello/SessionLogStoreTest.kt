@@ -1,6 +1,7 @@
 package io.github.darthr4v3m.ohtello.tello
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -48,28 +49,71 @@ class SessionLogStoreTest {
     }
 
     @Test
-    fun `sessions come back oldest first so the newest reads last`() {
+    fun `sessions are listed oldest first, but shared newest first`() {
         val store = store()
         repeat(3) { index ->
             now += 1_000
             store.startSession("session $index")
         }
 
+        // On disk, oldest first — that is what rotation prunes from.
+        val listed = store.sessions().map { it.readText().lineSequence().first() }
+        assertEquals(listOf("session 0", "session 1", "session 2"), listed)
+
+        // Shared, newest first: the run you just had should not be nine
+        // sessions down when you paste it into a bug report.
         val text = store.shareableText()
-        assertTrue(text.indexOf("session 0") < text.indexOf("session 2"))
+        assertTrue(text.indexOf("session 2") < text.indexOf("session 0"))
+        assertTrue(text.trimStart().startsWith("====="))
     }
 
     @Test
-    fun `sharing keeps the recent end when there is too much to send`() {
+    fun `lines keep their order within a session`() {
+        // Only the session order is reversed. Reversing lines too would put
+        // every reply above the command that caused it.
+        val store = store()
+        store.startSession("header")
+        store.append(entry("→ command"))
+        store.append(entry("← ok", CommandLogEntry.Kind.RECEIVED))
+
+        val text = store.shareableText()
+        assertTrue(text.indexOf("header") < text.indexOf("→ command"))
+        assertTrue(text.indexOf("→ command") < text.indexOf("← ok"))
+    }
+
+    @Test
+    fun `an oversized share drops the oldest sessions, never the newest`() {
+        val store = store()
+        // Three sessions, each far too big to all fit in the budget below.
+        repeat(3) { index ->
+            now += 1_000
+            store.startSession("session $index")
+            repeat(60) { store.append(entry("session $index line $it")) }
+        }
+
+        // Room for the newest session and then some, but nowhere near all three.
+        val newest = store.sessions().last()
+        val budget = newest.readText().length + newest.name.length + 100
+
+        val trimmed = store.shareableText(maxChars = budget)
+
+        assertTrue("the newest session's last line", trimmed.contains("session 2 line 59"))
+        assertTrue("the newest session's first line", trimmed.contains("session 2 line 0"))
+        assertFalse("the oldest session should have been dropped", trimmed.contains("session 0 line"))
+        assertTrue("a cut must be visible", trimmed.contains("…"))
+    }
+
+    @Test
+    fun `a single session larger than the budget keeps its most recent lines`() {
         val store = store()
         store.startSession("header")
         repeat(200) { store.append(entry("line $it")) }
 
         val trimmed = store.shareableText(maxChars = 400)
 
-        assertTrue(trimmed.length <= 402)
         assertTrue("the newest lines are the ones worth keeping", trimmed.contains("line 199"))
-        assertTrue(trimmed.startsWith("…"))
+        assertFalse("the oldest lines should have gone", trimmed.contains("line 0 "))
+        assertTrue(trimmed.endsWith("…\n"))
     }
 
     @Test

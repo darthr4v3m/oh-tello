@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -692,14 +693,19 @@ private fun ConsoleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(visible, key = { it.id }) { entry ->
-                    Text(
-                        text = "${timeFormat.format(Date(entry.timestampMillis))}  ${entry.text}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = entry.kind.color(),
-                    )
+            // Long-press any line to select and copy it. Share sends the whole
+            // history and is the right tool for a bug report; this is for
+            // quoting the two lines that actually matter.
+            SelectionContainer {
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    items(visible, key = { it.id }) { entry ->
+                        Text(
+                            text = "${timeFormat.format(Date(entry.timestampMillis))}  ${entry.text}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = entry.kind.color(),
+                        )
+                    }
                 }
             }
         }

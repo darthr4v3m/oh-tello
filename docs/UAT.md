@@ -14,8 +14,11 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is complete — 19 of 19, on the bench.** What is left is Part B, all fourteen checks, and
-every one of them needs the motors spinning and about 3 × 3 m of clear space.
+**Part A is 19 of 20**, on the bench. Only **A20** is open — it covers the two console changes made
+after Part A passed, and needs nothing but the app.
+
+Everything else left is Part B, all fourteen checks, every one of them needing the motors spinning
+and about 3 × 3 m of clear space.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -195,6 +198,17 @@ logged as `ignored a non-SDK packet on the command port: cc …`, and the handsh
 Seeing that line followed by `handshake did not take, trying once more` and then `SDK mode entered`
 is a **pass** — the junk was handled. Seeing the connect fail is not.
 - [x] Pass — notes: `three cold cycles, three first-press connects; run 3 filtered a cc packet`
+
+### A20 — Console text can be copied, and Share reads newest first
+**Do:** with a few lines in the console, long-press one of them. Then tap **Share**.
+**Expect:** long-press starts a text selection with drag handles and a **Copy** action, and what
+you copy pastes correctly elsewhere. Selecting across lines scrolled out of view may not work —
+that is a Compose limitation of selection inside a lazy list, not a bug; what is on screen is the
+case that matters.
+**In the shared text:** the **newest** session is at the top, headed `===== session-… =====`, with
+older ones below. Lines within each session stay in the order they happened — only the sessions are
+reversed. If the text was long enough to be cut, a `…` marks where.
+- [ ] Pass — notes: `______________________`
 
 ---
 

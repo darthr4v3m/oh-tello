@@ -79,18 +79,38 @@ class SessionLogStore(
             ?: emptyList()
 
     /**
-     * All stored sessions as one blob for sharing, newest last, trimmed from the
-     * front to [maxChars] — the recent end is the interesting one, and an intent
-     * that carries a few megabytes of text will be rejected.
+     * All stored sessions as one blob for sharing, **newest session first**, so
+     * the run you just had is at the top rather than after nine older ones.
+     * Lines stay in order within a session — reversing those would make a
+     * sequence of commands unreadable, and the sequence is the whole point.
+     *
+     * Sessions are added whole until [maxChars] runs out, so the newest one is
+     * never the one that gets cut: an intent carrying a few megabytes of text
+     * is rejected outright, and older history is the part worth losing. The one
+     * session that straddles the limit contributes its most recent lines.
      */
     fun shareableText(maxChars: Int = MAX_SHARE_CHARS): String {
-        val text = synchronized(lock) {
-            sessions().joinToString("\n") { file ->
+        val newestFirst = synchronized(lock) {
+            sessions().reversed().map { file ->
                 val body = runCatching { file.readText() }.getOrDefault("<unreadable>\n")
                 "===== ${file.name} =====\n$body"
             }
         }
-        return if (text.length <= maxChars) text else "…\n" + text.takeLast(maxChars)
+
+        val out = StringBuilder()
+        for (block in newestFirst) {
+            if (out.length + block.length <= maxChars) {
+                out.append(block)
+                continue
+            }
+            // Whatever room is left goes to the end of this session, which is
+            // its most recent lines, then stop: everything after is older still.
+            val room = maxChars - out.length
+            if (room > 0) out.append(block.takeLast(room))
+            out.append(TRUNCATION_MARKER)
+            break
+        }
+        return out.toString()
     }
 
     private fun prune(keep: Int) {
@@ -105,5 +125,8 @@ class SessionLogStore(
 
         private const val PREFIX = "session-"
         private const val KIND_WIDTH = 9
+
+        /** Says the blob was cut rather than the phone having no older logs. */
+        private const val TRUNCATION_MARKER = "\n…\n"
     }
 }
