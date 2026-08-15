@@ -20,17 +20,53 @@ data class TelloState(
     /** Battery charge, percent. */
     val batteryPercent: Int? get() = int("bat")
 
-    /** Height above the takeoff point, cm, from the barometer/IMU. */
+    /**
+     * Height above the takeoff point, cm — but read the caveats before trusting it.
+     *
+     * The drone's internal height is a decimetre integer, so this only ever
+     * arrives in steps of 10 and cannot be more precise than that. It is
+     * relative to the pressure datum captured at takeoff, which is known to be
+     * captured badly, so it under-reads: measured at 40 during a hover where
+     * [timeOfFlightCm] read 76 and the pilot measured ~80. It also drifts over
+     * a flight and can legitimately go negative.
+     *
+     * [timeOfFlightCm] is the accurate one at low altitude.
+     */
     val heightCm: Int? get() = int("h")
 
-    /** Distance to the ground from the downward time-of-flight sensor, cm. */
+    /**
+     * Distance to whatever is directly below, cm, from the downward
+     * time-of-flight sensor. Measured to the ground below rather than to the
+     * takeoff plane, so flying off a table changes this while [heightCm] holds.
+     *
+     * SDK 1.3 documents the valid range as 30–1000. Below 30 is a floor rather
+     * than a distance — a drone sitting on the floor reports 10 on this unit —
+     * and an out-of-range read is reported as a *large* number, around 6553,
+     * not a small one. So `tof < 30` means "no usable distance" and a big value
+     * means "nothing in range", never "very high up". Do not test for an exact
+     * floor value; it is not documented and may differ between airframes.
+     */
     val timeOfFlightCm: Int? get() = int("tof")
 
     /** Motor-on time since power up, seconds. */
     val flightTimeSeconds: Int? get() = int("time")
 
-    /** Barometer reading, cm. */
-    val barometerCm: Double? get() = double("baro")
+    /**
+     * Absolute pressure altitude, **metres** — not centimetres, whatever the
+     * SDK says.
+     *
+     * DJI's own 1.3 document contradicts itself here: its read-command table
+     * gives `baro?` as `(m)` while its state-packet section calls the same
+     * sensor `cm`, and SDK 2.0 carried the wrong one forward. Metres is the
+     * reading that survives contact with reality — `djitellopy` multiplies this
+     * field by 100 to get centimetres, a hover 80cm off the floor moved it by
+     * 0.79, and it reads around 115 at an ordinary ground elevation and goes
+     * negative on a high-pressure day. None of that works in centimetres.
+     *
+     * Unlike [heightCm] this is absolute, so a *difference* between two packets
+     * is free of the takeoff-datum error that makes height under-read.
+     */
+    val barometerMetres: Double? get() = double("baro")
 
     /** Lowest and highest board temperature, °C. */
     val temperatureLowC: Int? get() = int("templ")

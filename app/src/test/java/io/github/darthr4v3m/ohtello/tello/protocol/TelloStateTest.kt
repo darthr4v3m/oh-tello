@@ -23,7 +23,9 @@ class TelloStateTest {
         assertEquals(0, state.heightCm)
         assertEquals(10, state.timeOfFlightCm)
         assertEquals(0, state.flightTimeSeconds)
-        assertEquals(-19.19, state.barometerCm!!, 0.001)
+        // Metres, not centimetres. A negative pressure altitude is ordinary;
+        // -19.19 cm would be nonsense, which is half the reason we know.
+        assertEquals(-19.19, state.barometerMetres!!, 0.001)
         assertEquals(71, state.temperatureLowC)
         assertEquals(74, state.temperatureHighC)
         assertEquals(-1, state.pitchDeg)

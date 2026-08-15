@@ -413,11 +413,13 @@ class TelloController(
             // silent only when telemetry actually says it is down, since an
             // unknown height is better warned about than assumed safe.
             //
-            // `h` is barometric and reads low — measured at 40 against a real
-            // 80cm, while `tof` read 76 — so the margin here is about half what
-            // it looks. It holds at a normal 80-100cm hover, where `h` sits at
-            // 40-50; a hover low enough for `h` to read 0 would go unwarned.
-            // See the roadmap note in the README before tightening this.
+            // `h` reads low: 40 during a hover where `tof` read 76 and the
+            // pilot measured ~80. Whether that is a scale error or a fixed
+            // offset is unresolved, and it decides how thin this gate is. A
+            // scale puts `h` at 20 during a 45cm hover and the gate holds; an
+            // offset puts it at 0 and the warning never fires. The offset is
+            // the more plausible of the two. See the README before relying on
+            // this, and note `h` is quantised to 10cm regardless.
             val onTheGround = _state.value?.heightCm?.let { it <= 0 } == true
 
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&

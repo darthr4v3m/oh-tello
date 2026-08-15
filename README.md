@@ -360,20 +360,64 @@ Measured on a real flight at roughly 80 cm:
 
 | field | reading | what it is |
 | --- | --- | --- |
-| `h` | 40 | barometric height above the takeoff point |
-| `tof` | 76 | downward time-of-flight sensor, floors at 10 |
-| `baro` | delta of 0.79 between hover and ground | absolute pressure altitude |
+| `h` | 40 | height above the takeoff point, quantised to 10 cm |
+| `tof` | 76 | distance to the ground below; valid 30-1000, floors under 30 |
+| `baro` | 115.02 hovering, 114.23 landed | absolute pressure altitude, **in metres** |
 
-`tof` matches reality. So does the `baro` delta, if that field is in metres — the SDK documents it
-as centimetres, which would make the difference 0.79 cm and cannot be right. `h` reads about half
-the true height.
+`tof` matches reality. So does the `baro` delta of 0.79 m. `h` under-reads by about 38 cm.
 
-That matters because the idle banner and the background notification both suppress themselves on
-`h <= 0`. The gate holds at a normal 80–100 cm hover, where `h` sits at 40–50, but a hover low
-enough for `h` to read 0 would go unwarned.
+**`baro` is in metres, not centimetres.** DJI's own 1.3 document contradicts itself — its
+read-command table says `(m)`, its state-packet section says `cm`, and SDK 2.0 carried the wrong one
+forward. Metres is what survives contact with reality: `djitellopy` multiplies the field by 100 to
+get centimetres, the value sits around 115 at an ordinary ground elevation, and it goes negative on
+a high-pressure day. The accessor here was called `barometerCm` and was wrong by 100x; it is now
+`barometerMetres`.
 
-Not implemented, deliberately: the hardening is one condition — airborne if `h > 0` **or**
-`tof > 15`. Ten is the ground reading, so fifteen clears it, and a real hover puts `tof` in the
-seventies; a drone on a table still reads 10, so it cannot bring back the false banner that was
-fixed in `00837e5`. Worth doing, but it changes flight-safety logic and should land with its own
-tests and its own pass through the UAT rather than being slipped in mid-run.
+**`h` is a decimetre value.** The drone's internal height is an integer number of decimetres, which
+is why every reading is a multiple of 10 and why `height?` answers `4dm` rather than a number of
+centimetres. It cannot be more precise than 10 cm, it is relative to a pressure datum captured at
+takeoff, it drifts over a flight, and it can legitimately go negative.
+
+**Why it under-reads is unresolved, and it matters.** One airborne sample cannot tell a scale error
+from a fixed offset: `h = true / 2` and `h = true - 38 cm` both predict 40 at a true 80. They
+disagree exactly where it counts. At a 45 cm hover the scale model puts `h` at 20 and the idle
+banner still fires; the offset model puts it at 0 and the warning goes silent on an aircraft that is
+airborne. The offset is the more plausible of the two — no source reports a 2x scale bug on hardware
+this heavily reverse-engineered, whereas the takeoff datum is known to be captured badly, and
+propwash lowering static pressure at spin-up would bias it in exactly this direction, by a constant
+amount, and only while the motors are turning.
+
+**UAT B14 settles it in one flight:** hover, log `h`/`tof`/`baro`, `up 100`, hover, log again. If
+`h/tof` stays near 0.5 it is a scale. If `tof - h` stays near 38 it is an offset.
+
+### The airborne gate
+
+The idle banner and the background notification both suppress themselves on `h <= 0`, which is the
+weakest available signal for the reason above, and biased the wrong way: a false "airborne" costs a
+needless warning, a false "on the ground" costs a missed one about an aircraft that is about to
+auto-land itself.
+
+Not implemented, deliberately — it changes flight-safety logic and should land with its own tests
+and its own UAT pass rather than be slipped in mid-run. The intended shape:
+
+- Airborne if `h > 0` **or** `tof` is above a named, empirical threshold. A dark or reflective floor
+  makes `tof` fail *upward*, to around 6553, so a bad surface produces a false "airborne" — the safe
+  direction. Flying over a table collapses `tof` while `h` holds, which is what the `or` is for.
+  Never test for an exact floor value: 10 is what this airframe reports, not a documented constant,
+  and the documented valid minimum is 30.
+- Possibly also "motors running", inferred from `time` increasing between packets. It is the only
+  field that tracks the motors rather than an altitude estimate, so it is immune to barometric drift
+  and to whatever the floor is made of. Needs confirming that it freezes when the drone sits with
+  motors stopped, which is a two-line check on data already being logged.
+- Keep the existing "unknown height means warn" behaviour either way.
+
+### SDK version: this targets 1.3, not 2.0
+
+Every command the app sends — `command`, `takeoff`, `land`, `emergency`, the six movements,
+`cw`/`ccw`, `rc`, `battery?` — is present in SDK **1.3**, with identical or wider ranges. That is a
+strength rather than a compromise: it is why this works on a standard Ryze Tello, which nominally
+predates 2.0. The 2.0-only additions are mission pads, station mode, `stop`, `sdk?` and `sn?`, and
+none of them are used here.
+
+`sdk?` and `sn?` do not exist before 2.0, so a standard Tello answering `unknown command` to them is
+the expected reply and a diagnostic in its own right rather than a fault — see issue #3.

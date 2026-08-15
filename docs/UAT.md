@@ -14,12 +14,14 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is complete — 20 of 20.** Part B is **paused after B2**: twelve checks left, every one of
+**Part A is complete — 20 of 20.** Part B is **paused after B2**: thirteen checks left, every one of
 them needing the motors spinning and about 3 × 3 m of clear space. **Resume at B3.**
 
-B2 turned up something worth carrying forward: the `h` field reads about half the true height, and
-the idle banner and the background notification both key off it. Not a failure and not fixed — the
-reasoning and the one-line hardening are written up in the README under *Height telemetry*.
+B2 turned up something worth carrying forward: `h` under-reads by about 38 cm, and the idle banner
+and the background notification both key off it. Whether that is a scale error or a fixed offset is
+unresolved, and the two disagree exactly where safety depends on it — **B14 settles it in one
+flight** and is worth doing early rather than last. Background in the README under *Height
+telemetry*.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -329,11 +331,30 @@ they can be up to 5 seconds apart, since the keepalive fires on its own cadence.
 That is why this test needs eyes and a stopwatch.
 - [ ] Done — result fed back into the app's wording
 
-### B14 — Emergency cut (optional, do it last)
+### B14 — Is the height error a scale or an offset?
+
+Settles the one open question from B2, in a single flight. Cheap, and it decides how thin the
+airborne gate really is.
+
+**Do:** take off and let it settle. Note **height**, **tof** and the real height. Then select
+**100 cm**, press **up**, let it settle again, and note the same three.
+
+**Then work out which of these holds:**
+- `height / tof` stayed near the same ratio at both altitudes → the error is a **scale**.
+- `tof - height` stayed near the same number at both altitudes → the error is an **offset**.
+
+**Why it matters:** at a 45 cm hover the scale model puts `height` at 20 and the idle banner still
+fires; the offset model puts it at 0 and the warning goes silent on a drone that is airborne. The
+offset is the more likely of the two, and it is the dangerous one. Whichever it is, write both sets
+of numbers into the notes — they are the evidence, not the conclusion.
+- [ ] Pass — notes: `______________________`
+### B15 — Emergency cut (optional, do it last)
 **Only over grass or a mat, at 30–50 cm, with guards on. The drone will drop.**
 **Do:** hover low, tap Emergency twice.
 **Expect:** motors cut instantly; the drone falls the short distance.
 - [ ] Pass — notes: `______________________` / [ ] Skipped
+
+
 
 ---
 
