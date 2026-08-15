@@ -14,11 +14,8 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is 19 of 20**, on the bench. Only **A20** is open — it covers the two console changes made
-after Part A passed, and needs nothing but the app.
-
-Everything else left is Part B, all fourteen checks, every one of them needing the motors spinning
-and about 3 × 3 m of clear space.
+**Part A is complete — 20 of 20, on the bench.** Everything left is Part B, all fourteen checks,
+every one of them needing the motors spinning and about 3 × 3 m of clear space.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -208,7 +205,7 @@ case that matters.
 **In the shared text:** the **newest** session is at the top, headed `===== session-… =====`, with
 older ones below. Lines within each session stay in the order they happened — only the sessions are
 reversed. If the text was long enough to be cut, a `…` marks where.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `copy works; newest session first in the shared text`
 
 ---
 
