@@ -12,43 +12,44 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ---
 
-## Still to run
+## Result
 
-**Part A: 18 of 20** — A11 and A12 passed on `229dd1e`, see their notes; every other Part A result
-predates the airborne-gate rewrite but is unaffected by it.
-**Part B: B1-B9 and B14 pass.** Left: **B10, B11, B12, B13, B15**, then Part C. B8 part two is a
-post-flight check rather than a test you can stage.
+**Part A 20/20. Part B 15/15. Part C: C2 done, C1 outstanding.**
 
-**Findings carried forward from this run:**
+The only check left is **C1** — the red *"Battery at N% — land it."* line, which needs the drone
+below 20% and so has to be caught opportunistically rather than staged.
 
-- **`h` reads low by an amount that is fixed within a flight but varies between them** — 35 cm on
-  one flight, 10-12 cm on two others. So there is no safe height below which `h` can be trusted, and
-  no way to predict when it will read 0 on a flying drone. The app no longer relies on it alone; see
-  B14 and the README under *The airborne gate*.
-- **The drone refuses to descend below about 28 cm, and says nothing** — it stops, hovers, and never
-  answers the command. Seen three times (`down 50`, `down 20`, `down 100`). The scaled movement
-  timeout is what returns control, in 4-8 s rather than 20.
-- **Export pairs the newest console log with the newest recording independently**, so exporting
-  right after a fresh launch can pair a new empty log with an older CSV. Cosmetic; on the triage
-  list.
+Part B was run frozen at `229dd1e`, deliberately: every fix during the earlier rounds invalidated
+tests that had already passed, so the code was pinned and defects were written down rather than
+fixed mid-run. Nothing regressed during the frozen run.
 
-The two that carry the most weight, so they are not left to last by accident:
+**Four defects were found and fixed before the freeze:**
 
-- **B9** — background the app while the drone is flying. This is the mandate the whole keepalive
-  design exists to serve, and the only test that proves the drone lands itself when the pilot walks
-  away.
-- **B13** — stopwatch the failsafe. The SDK says the drone auto-lands after 15 seconds of silence.
-  It does not: a log on 13 Aug showed it still answering at 23.2 s, and the drone was seen putting
-  itself down somewhere past 30 s. Every number in the app's wording was removed because of that,
-  and B13 is what replaces guesswork with a measurement.
+1. A binary packet on the command port read as the handshake reply, failing the first connect.
+2. Link loss going unnoticed when the drone's Wi-Fi vanished — an unsendable command was being
+   counted as a healthy reply.
+3. A movement the drone silently ignores locking every control for 20 seconds.
+4. The airborne gate reading `h`, which reports 0 on a flying drone.
 
-Which build each Part A result came from: A1–A9, A12, A14–A15 and A17 on `b05f374`; A16 and A18 on
-`a9bdfb4`; A10, A11, A13 and A19 on `c882619`. Fixes landed between those builds, but none changed
-behaviour an earlier test covered.
+**Two results were measured by the flight recorder rather than judged by eye:** B5's yaw (+89, -89,
++179 degrees against 90, 90, 180 asked) and B13's failsafe timing.
 
-**Build to test against:** the newest APK linked from PR #1 — the comment there always points at
-the latest one. Write the version string it shows under the app title into the box above, so a
-result is always tied to a build.
+**Findings worth carrying:**
+
+- **The failsafe is 18.5-24.9 s from last command to motors off**, not the documented 15. See B13.
+- **`h` reads low by an amount fixed within a flight but different every flight** — 10, 12, 35 and
+  58 cm measured across four. There is no height below which it can be trusted. See B14.
+- **The drone refuses to descend below about 28 cm and says nothing at all** — it stops, hovers, and
+  never answers. Seen three times.
+- **Returning to the app during a failsafe landing interrupts it.** The keepalive resumes within half
+  a second and tells the drone the pilot is back, leaving it with motors running at ground level.
+- **Export pairs the newest console log with the newest recording independently**, so exporting right
+  after a fresh launch can pair a new empty log with an older CSV.
+
+The last two are open issues, not fixed here.
+
+**Which build each result came from:** A1-A9, A13-A15 and A17 on `b05f374`; A16 and A18 on
+`a9bdfb4`; A10, A19 on `c882619`; A11, A12 and all of Part B on `229dd1e`.
 
 ---
 
@@ -307,75 +308,52 @@ banner should have been up. Asking a pilot to produce that condition on demand d
 ### B10 — Coming straight back does not land it
 **Do:** hover, press Home, and return to the app within ~3 seconds.
 **Expect:** the drone keeps hovering. A notification may briefly appear; it is cleared on return.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `3s away mid-takeoff; held 70cm throughout, telemetry never stopped`
 
 ### B11 — Back gesture lands it
 **Do:** hover, swipe back, choose **Land, then quit**.
 **Expect:** the drone lands, *then* the app closes. Not the other way round.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `land sent 0.7s before the app closed; recorder stops mid-descent`
 
 ### B12 — Walking out of range
 **Do:** hover, walk away until telemetry goes stale (15–30 m, or put a wall between you).
 **Expect:** chip flips to "no telemetry", then the link fails with `link lost…`, and the drone
 lands itself on its own failsafe. Walk back, reconnect.
 **Caution:** do this over grass, and keep the drone in sight.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `fridge test: commands died, telemetry kept flowing, link lost in 10.5s`
 
-### B13 — How long is the drone's failsafe, really?
+### B13 — How long is the drone's failsafe, really?  — MEASURED
 
-Measuring the firmware, not the app. The SDK says the drone lands 15 seconds after the last
-command. On 14 August 2026 a session log showed it answering normally after **23.2 seconds** of
-silence, and the pilot watching it saw a landing somewhere past 30 — so the documented figure is
-not what this firmware does, and the app currently says "shortly" because it cannot honestly say a
-number.
+Measuring the firmware, not the app. The SDK says 15 seconds after the last command. It is not 15.
 
-**Do:**
-1. Turn **keepalives** on in the console — you need to see the last one's timestamp.
-2. Take off, hover at about 1 m, over grass or a mat.
-3. Press Home **and start a stopwatch on the same press**.
-4. Watch the drone. Stop the watch the moment it **touches down**, not when it starts descending.
-5. Reopen the app, read the timestamp of the last `KEEPALIVE → command` before
-   `app backgrounded`, and the `app backgrounded` line itself.
+**Four runs on 16 August**, all by backgrounding the app and letting the drone put itself down. No
+stopwatch: `time` is DJI's motor-on counter, it freezes when the motors cut, and it is cumulative,
+so touchdown can be read off the recorder afterwards even though Android freezes the app while it
+is in the background.
 
-Do it twice — Tello firmware is not famously consistent.
-
-| Run | Last keepalive | `app backgrounded` at | Stopwatch to touchdown | Began descending at |
+| run | hover height | last command reached the drone | motors off | elapsed |
 | --- | --- | --- | --- | --- |
-| 1 | `________` | `________` | `______ s` | `______ s` |
-| 2 | `________` | `________` | `______ s` | `______ s` |
+| B9 | 0.8 m | 17:29:26.1 | 17:29:44.6 | **18.5 s** |
+| 1 | 1.8 m | 18:03:16.2 | 18:03:38.8 | **22.6 s** |
+| 2 | 1.8 m | 18:03:56.0 | 18:04:19.4 | **23.4 s** |
+| 3 | 1.8 m | 18:04:57.8 | 18:05:22.7 | **24.9 s** |
 
-**The number that matters** is touchdown minus the *last keepalive*, not minus the backgrounding —
-they can be up to 5 seconds apart, since the keepalive fires on its own cadence.
+**Silence to motors-off is 18.5-24.9 s**, and it scales with height because the descent is part of
+it. So the failsafe itself fires somewhere around 15-19 s and the drone then takes several seconds
+to come down.
 
-*Note:* a landed Tello still answers `ok`, so the **console** log cannot tell you when it stopped
-flying. The **flight recorder** can: `time` stops advancing when the motors cut, `h` falls to 0 and
-`tof` drops to its floor. Pull it afterwards with
-`adb exec-out run-as io.github.darthr4v3m.ohtello tar c files/logs > logs.tar` and the answer is the
-gap between the last keepalive in the console log and the last advancing `time` in the CSV —
-millisecond resolution instead of human reaction time.
+**Read run 3 first if you only read one.** It is the only run where the motors were still turning
+when the app came back, so its touchdown is directly observed rather than inferred from the counter
+having already stopped. It is also the longest.
 
-Still do one run with eyes and a stopwatch as well. The recorder is new and unproven on a real
-flight, and this measurement is the one the app's wording depends on.
+**This retires the 23.2 s figure that started the doubt.** That measured the drone still *answering*
+after 23 s of silence, and a landed Tello answers perfectly well. It was never a measure of flight.
+The earlier suspicion of a 30 s failsafe was an artefact of watching the wrong thing.
 
-**A measurement already exists, taken for free during B9 on 16 Aug.** The app is frozen by Android
-while backgrounded, so the recorder cannot watch the landing — but `time` is cumulative, so the
-moment the motors stopped can be reconstructed afterwards:
-
-```
-17:29:26.117  last command reached the drone (a keepalive)
-17:29:34.534  last sample before Android froze the app — hovering, time=14
-17:29:50.186  app returns — landed, time=24
-```
-
-Ten more motor-seconds after the last live sample puts touchdown at ~17:29:44.6, so **silence to
-motors-off was about 18.5 s**. That figure includes the descent itself (~4-5 s from a metre), which
-puts the failsafe trigger at **roughly 14 s** — essentially the documented 15.
-
-**This also explains the 23.2 s that started the confusion:** that measured the drone still
-*answering* after 23 s, and a landed Tello answers perfectly well. It was never a measure of
-flight. Run this test deliberately to confirm, but the earlier suspicion of a 30 s failsafe looks
-like an artefact of measuring the wrong thing.
-- [ ] Done — result fed back into the app's wording
+**What it means for the app:** leaving the app with the drone airborne buys **up to about 25
+seconds** of unattended hovering, not 15. The idle warning fires at 12 s, which is a thinner margin
+than intended.
+- [x] Done — notes: `18.5 / 22.6 / 23.4 / 24.9 s across four runs; trigger ~15-19 s plus descent`
 
 ### B14 — Is the height error a scale or an offset?
 
@@ -406,7 +384,7 @@ want independent corroboration.
 **Only over grass or a mat, at 30–50 cm, with guards on. The drone will drop.**
 **Do:** hover low, tap Emergency twice.
 **Expect:** motors cut instantly; the drone falls the short distance.
-- [ ] Pass — notes: `______________________` / [ ] Skipped
+- [x] Pass — notes: `two taps, 3 copies, motors off ~0.5s later; vgz 29 on the drop`
 
 
 
@@ -422,7 +400,7 @@ want independent corroboration.
 ### C2 — Collect the evidence
 **Do:** tap **Share**, send the log to yourself.
 **Expect:** the whole afternoon's sessions, newest last, each headed with the build.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `exported after every Part B test; newest session first`
 
 ---
 

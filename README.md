@@ -49,10 +49,14 @@ console.
 | 6. Video stream via port 11111 (stretch) | not started |
 
 Also in, beyond the v1 list: a two-tap `emergency` motor cutoff; an idle keepalive so the drone
-does not auto-land after 15 seconds of silence, sent only while the app is in the foreground so
-that walking away hands control back to the drone's own failsafe; a back-gesture guard that offers
-to land first; and Wi-Fi socket binding (see
-[Talking to a network with no internet](#talking-to-a-network-with-no-internet)).
+does not auto-land while you are looking at it, sent only while the app is in the foreground so
+that walking away hands control back to the drone's own failsafe; a flight recorder that writes the
+telemetry stream to a CSV; a back-gesture guard that offers to land first; and Wi-Fi socket binding
+(see [Talking to a network with no internet](#talking-to-a-network-with-no-internet)).
+
+**Acceptance tested against a real drone.** [docs/UAT.md](docs/UAT.md) — Part A 20/20, Part B 15/15,
+run against a pinned build so that fixes could not invalidate results mid-run. Four defects were
+found and fixed before that run, and nothing regressed during it.
 
 **Flown.** First real flight on 13 August 2026, from a Pixel 7 running Android 17 — the device the
 official app cannot launch on. Connect and handshake, takeoff, land, the discrete moves, yaw, and
