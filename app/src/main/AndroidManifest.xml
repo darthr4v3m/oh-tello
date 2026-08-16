@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required for any socket use, including purely local UDP to the drone. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        BEFORE RAISING targetSdk TO 37: this app must also declare and request
+        android.permission.ACCESS_LOCAL_NETWORK, or every packet to the drone
+        will be silently blocked.
+
+        Android 17 gates traffic to local network addresses behind a runtime
+        permission, and 192.168.10.1 is one. It applies to all such traffic, not
+        just discovery. Apps targeting API 36 and below are exempt, which is the
+        only reason this works today.
+
+        It is deliberately not declared yet: it does nothing before targetSdk 37,
+        and it needs a runtime request and a refusal path, which is real work
+        rather than a manifest line. The failure it causes looks exactly like a
+        socket-binding fault, so whoever bumps targetSdk will otherwise lose an
+        afternoon inside WifiSocketBinder looking for a bug that is not there.
+    -->
+
+    <!--
+        Needed to find the Wi-Fi Network object and bind our sockets to it. The
+        Tello's access point has no internet, so Android keeps mobile data as the
+        default network and unbound UDP would leave via cellular and never reach
+        the drone. No location permission is needed: we never scan for networks,
+        we only look at the network the user already joined.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+        For one notification: the app was backgrounded with the drone airborne,
+        so the keepalive stopped and the drone is about to land itself. That
+        warning has to reach someone who is not looking at the screen. Nothing
+        runs in the background to produce it — no service, no alarm, no wakelock.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OhTello">
+
+        <!--
+            Portrait is locked deliberately: in landscape the Land and Emergency
+            controls leave the screen, and tilting the phone to look up at the
+            drone is exactly the gesture that would rotate it.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.OhTello">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

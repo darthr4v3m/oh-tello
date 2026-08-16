@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Compose paints everything; this platform theme only exists so the window
+        has sane defaults before the first frame. No AppCompat/Material XML
+        dependency needed.
+    -->
+    <style name="Theme.OhTello" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF101418</item>
+    </style>
+</resources>
