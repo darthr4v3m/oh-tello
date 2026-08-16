@@ -8,6 +8,7 @@ import io.github.darthr4v3m.ohtello.BuildConfig
 import io.github.darthr4v3m.ohtello.tello.CommandLogEntry
 import io.github.darthr4v3m.ohtello.tello.ConnectionState
 import io.github.darthr4v3m.ohtello.tello.SessionLogStore
+import io.github.darthr4v3m.ohtello.tello.TelemetryLogStore
 import io.github.darthr4v3m.ohtello.tello.TelloController
 import io.github.darthr4v3m.ohtello.tello.WifiSocketBinder
 import io.github.darthr4v3m.ohtello.tello.protocol.MoveDirection
@@ -26,20 +27,25 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
 
     private val sessionLog = SessionLogStore(File(application.filesDir, "logs"))
 
+    // Same directory, different files and a different shape: prose for a human
+    // reading a failure, a table for measuring a flight.
+    private val telemetryLog = TelemetryLogStore(File(application.filesDir, "logs"))
+
     private val notifier = FlightNotifier(application)
 
     private val controller = TelloController(
         socketBinder = WifiSocketBinder(application),
         sessionLog = sessionLog,
+        telemetryLog = telemetryLog,
     )
 
     init {
         // Recorded per run of the app, and stamped with what produced it: a log
         // sent on later is worth little without the build and the device.
-        sessionLog.startSession(
-            "Oh-Tello ${BuildConfig.VERSION_NAME} — ${Build.MANUFACTURER} ${Build.MODEL}, " +
-                "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-        )
+        val header = "Oh-Tello ${BuildConfig.VERSION_NAME} — ${Build.MANUFACTURER} ${Build.MODEL}, " +
+            "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+        sessionLog.startSession(header)
+        telemetryLog.startSession(header)
     }
 
     /** The stored sessions as one blob, for the console's share button. */

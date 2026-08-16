@@ -301,6 +301,44 @@ exit, so a log survives the app being killed mid-flight. **Share** in the consol
 as text — each is headed with the build, the phone and the Android version. That is the thing worth
 attaching to a bug report; the on-screen console is gone the moment the app restarts.
 
+### The flight recorder
+
+Alongside the console log, the app records the drone's state stream to a CSV in the same directory.
+Two logs rather than one on purpose: the console is prose for a human reading a failure, this is a
+table for measuring a flight, and the two want opposite formats and rates.
+
+```
+# Oh-Tello 0.1.0-pr1-abc1234 — Google Pixel 7, Android 17 (API 37)
+# started 14:31:51.199
+# t_ms: milliseconds since the first packet. clock: matches the console log.
+# h,tof: cm. baro: metres. yaw,pitch,roll: degrees. vgz: cm/s. agz: 0.001g. time: motor-on seconds.
+t_ms,clock,bat,h,tof,baro,yaw,pitch,roll,vgz,agz,time
+0,14:31:54.780,45,0,10,114.23,5,0,0,0,-1002.00,28
+500,14:31:55.281,45,10,31,114.44,5,-1,2,18,-1013.00,28
+```
+
+It exists because the questions this project still has open are arithmetic on those columns, and the
+console cannot answer them. When the drone's failsafe actually lands it, for instance, is invisible
+in the console — a landed Tello still answers `ok` — but obvious here, because `time` stops
+advancing when the motors cut, `h` falls to 0 and `tof` drops to its floor. Likewise the two rules
+that decide whether the height error is a scale or an offset use only `h` and `tof`.
+
+Size is bounded and deliberately modest. The drone pushes ~10 packets a second; samples are
+decimated to 2 Hz, which keeps every manoeuvre visible for about 7 KB a minute. Each file stops at
+1 MB — roughly two and a half hours — with a `# stopped at …` line marking the cut, and only the
+last 5 are kept, so the worst case on disk is about 5 MB. A file is created on the first packet
+rather than at launch, so app runs that never connect leave nothing behind and cannot evict the
+recording of a real flight.
+
+**Getting it off the phone** currently needs a cable — **Share** sends the console log only, since a
+CSV would blow the size an intent can carry:
+
+```bash
+PKG=io.github.darthr4v3m.ohtello
+adb shell run-as $PKG ls files/logs
+adb exec-out run-as $PKG tar c files/logs > logs.tar
+```
+
 ## On KTello
 
 Two existing Kotlin wrappers were reviewed before writing this — `victor-vct/KTello` (MIT, Android,

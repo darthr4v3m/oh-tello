@@ -67,6 +67,8 @@ class TelloController(
     private val clock: () -> Long = System::currentTimeMillis,
     /** Mirrors the console to disk so a bad connection can be read back later. */
     private val sessionLog: SessionLogStore? = null,
+    /** Records the state stream to disk so a flight can be measured afterwards. */
+    private val telemetryLog: TelemetryLogStore? = null,
     /** How long without a pilot command before [pilotIdle] is raised. */
     private val idleWarningMillis: Long = IDLE_WARNING_MS,
 ) {
@@ -393,6 +395,10 @@ class TelloController(
             lastStateAtMillis = clock()
             _telemetryFresh.value = true
             _state.value = parsed
+            // Decimated and capped inside the store, so this stays cheap at the
+            // ~10 Hz the drone pushes. Its own lock, not the console's: this
+            // must never contend with a command waiting to go out.
+            telemetryLog?.append(parsed)
         }
     }
 

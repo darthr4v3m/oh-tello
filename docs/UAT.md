@@ -327,8 +327,15 @@ Do it twice — Tello firmware is not famously consistent.
 **The number that matters** is touchdown minus the *last keepalive*, not minus the backgrounding —
 they can be up to 5 seconds apart, since the keepalive fires on its own cadence.
 
-*Note:* a landed Tello still answers `ok`, so the log alone cannot tell you when it stopped flying.
-That is why this test needs eyes and a stopwatch.
+*Note:* a landed Tello still answers `ok`, so the **console** log cannot tell you when it stopped
+flying. The **flight recorder** can: `time` stops advancing when the motors cut, `h` falls to 0 and
+`tof` drops to its floor. Pull it afterwards with
+`adb exec-out run-as io.github.darthr4v3m.ohtello tar c files/logs > logs.tar` and the answer is the
+gap between the last keepalive in the console log and the last advancing `time` in the CSV —
+millisecond resolution instead of human reaction time.
+
+Still do one run with eyes and a stopwatch as well. The recorder is new and unproven on a real
+flight, and this measurement is the one the app's wording depends on.
 - [ ] Done — result fed back into the app's wording
 
 ### B14 — Is the height error a scale or an offset?
@@ -338,6 +345,10 @@ airborne gate really is.
 
 **Do:** take off and let it settle. Note **height**, **tof** and the real height. Then select
 **100 cm**, press **up**, let it settle again, and note the same three.
+
+**Easier than eyeballing it:** the app now records `h`, `tof` and `baro` to a CSV twice a second.
+Pull it with `adb exec-out run-as io.github.darthr4v3m.ohtello tar c files/logs > logs.tar` and the
+two hovers are just rows — no need to read numbers off a screen while holding a tape measure.
 
 **Then work out which of these holds:**
 - `height / tof` stayed near the same ratio at both altitudes → the error is a **scale**.
