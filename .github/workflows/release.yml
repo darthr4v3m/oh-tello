@@ -1,0 +1,206 @@
+# Cuts a release. Separate from Android CI on purpose: CI runs constantly and
+# produces things that are meant to be replaced, this runs rarely and produces
+# something permanent. Different triggers, different concurrency, and a much
+# smaller blast radius when it goes wrong.
+#
+# Two ways in, both needing write access on the repository and no one else:
+#
+#   - push a v* tag, the usual route from a checkout;
+#   - Run workflow on main with the version in the box, for a maintainer with no
+#     checkout to hand, or for an agent doing it unattended.
+#
+# In the second case the tag is created *by this run*, and only after the build
+# has passed — so a tag can never point at a commit that failed to compile. That
+# is the whole reason this exists rather than a one-line `git tag && git push`,
+# which checks nothing.
+#
+# The build itself comes from .github/actions/build-apk, the same one CI uses,
+# so a release is not built differently from the thing that was tested.
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version to release, e.g. v0.1.0. Must not already exist.'
+        required: true
+        type: string
+      dry_run:
+        description: 'Check and build, but create nothing. Answers "is main releasable?" without spending a version number.'
+        required: false
+        default: false
+        type: boolean
+
+# Never cancel a release in flight. Unlike CI, a half-finished run here can
+# leave a tag with no asset attached to it.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # create the tag and the release, and upload the APK
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Everything that could refuse this release is checked here, before a build
+    # burns three minutes and before anything permanent exists.
+    - name: Check the tag
+      id: check
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        INPUT_TAG: ${{ inputs.tag }}
+        DRY_RUN: ${{ inputs.dry_run }}
+      run: |
+        set -euo pipefail
+
+        if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          # The tag exists already; it is what triggered this run.
+          {
+            echo "tag=$GITHUB_REF_NAME"
+            echo "create=false"
+            echo "publish=true"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        tag="$INPUT_TAG"
+
+        case "$tag" in
+          v*) ;;
+          *) echo "::error::a release tag has to start with v; got '$tag'"; exit 1 ;;
+        esac
+
+        # Releases come from main. Tagging an arbitrary branch would publish a
+        # permanent release of code that was never merged or reviewed.
+        if [ "$GITHUB_REF_NAME" != "main" ]; then
+          echo "::error::releases are cut from main; this run is on '$GITHUB_REF_NAME'"
+          exit 1
+        fi
+
+        # A release is a fixed thing. Moving one silently changes what people
+        # already downloaded.
+        if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+          echo "::error::$tag already exists — pick a new version rather than moving this one"
+          exit 1
+        fi
+
+        # A dry run does every check and the whole build, then stops. It proves
+        # main is releasable without spending a version number on finding out.
+        if [ "$DRY_RUN" = "true" ]; then
+          echo "::notice::dry run — $tag passes every check; nothing will be created"
+          {
+            echo "tag=$tag"
+            echo "create=false"
+            echo "publish=false"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        {
+          echo "tag=$tag"
+          echo "create=true"
+          echo "publish=true"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Build the APK
+      id: build
+      uses: ./.github/actions/build-apk
+      with:
+        release_tag: ${{ steps.check.outputs.tag }}
+        keystore_base64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+
+    # Only now, with a green build behind it.
+    - name: Create the tag
+      if: steps.check.outputs.create == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ steps.check.outputs.tag }}
+      run: |
+        set -euo pipefail
+        gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+          -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA" >/dev/null
+        echo "created $TAG at $GITHUB_SHA"
+
+    - name: Publish the release
+      id: publish
+      if: steps.check.outputs.publish == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REPO: ${{ github.repository }}
+        TAG: ${{ steps.check.outputs.tag }}
+        APK: ${{ steps.build.outputs.apk }}
+        SHARED_KEY: ${{ steps.build.outputs.signing_shared }}
+      run: |
+        set -euo pipefail
+
+        if [ "$SHARED_KEY" != "true" ]; then
+          echo "::error::DEBUG_KEYSTORE_BASE64 is not set, so this build carries a throwaway key. A release nobody can upgrade from is worse than no release."
+          exit 1
+        fi
+
+        # Created only if it does not already exist, so a release drafted by hand
+        # in the web interface still gets its APK attached rather than a second
+        # release appearing beside it.
+        gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 || \
+          gh release create "$TAG" --repo "$REPO" --target "$GITHUB_SHA" --latest \
+            --title "Oh-Tello $TAG" \
+            --notes 'Release build.
+
+        Still debug-signed: the project has no release keystore yet, so this
+        installs on a device but is not suitable for distribution.'
+
+        # Nothing is ever deleted from a tagged release, unlike the rolling
+        # prerelease CI keeps for a pull request.
+        gh release upload "$TAG" "$APK" --repo "$REPO" --clobber
+
+        echo "url=https://github.com/$REPO/releases/download/$TAG/$APK" >> "$GITHUB_OUTPUT"
+        echo "### 📦 [$APK](https://github.com/$REPO/releases/download/$TAG/$APK)" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "Released as **$TAG** from \`${GITHUB_SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
+
+    # The point of a dry run is a clear answer, so say so rather than leaving a
+    # green tick to be interpreted.
+    - name: Report the dry run
+      if: steps.check.outputs.publish != 'true'
+      env:
+        TAG: ${{ steps.check.outputs.tag }}
+        APK: ${{ steps.build.outputs.apk }}
+        SHARED_KEY: ${{ steps.build.outputs.signing_shared }}
+      run: |
+        set -euo pipefail
+        {
+          echo "### Dry run: \`$TAG\` is releasable"
+          echo ""
+          echo "Every check passed and the build succeeded. Nothing was created."
+          echo ""
+          echo "| | |"
+          echo "| --- | --- |"
+          echo "| would tag | \`$TAG\` at \`${GITHUB_SHA:0:7}\` |"
+          echo "| would publish | \`$APK\` |"
+          echo "| shared signing key | $SHARED_KEY |"
+          echo ""
+          echo "Run again with **dry_run** unticked to release it."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$SHARED_KEY" != "true" ]; then
+          echo "::error::DEBUG_KEYSTORE_BASE64 is not set — a real run would refuse to publish"
+          exit 1
+        fi
+
+    - name: Upload reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: reports
+        path: |
+          app/build/reports/
+          app/build/test-results/
+        if-no-files-found: ignore

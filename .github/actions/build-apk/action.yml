@@ -1,0 +1,130 @@
+name: Build the debug APK
+description: >-
+  JDK, signing key, Gradle build and a filename. Shared by the CI and release
+  workflows so the two cannot drift apart on how a build is actually made — a
+  release that differs from what CI tested would be worth nothing.
+
+inputs:
+  release_tag:
+    description: 'The tag being released, when this is a release build. Changes the APK name.'
+    required: false
+    default: ''
+  pr_number:
+    description: 'Pull request number, when this is a pull request build.'
+    required: false
+    default: ''
+  pr_sha:
+    description: 'Pull request head sha, when this is a pull request build.'
+    required: false
+    default: ''
+  keystore_base64:
+    description: >-
+      The shared debug keystore, base64 encoded. Empty falls back to a throwaway
+      key, which builds but will not install over anything else.
+    required: false
+    default: ''
+
+outputs:
+  apk:
+    description: 'Filename of the built APK, in the workspace root.'
+    value: ${{ steps.name.outputs.apk }}
+  built_at:
+    description: 'UTC build timestamp, as it appears in the filename.'
+    value: ${{ steps.name.outputs.built_at }}
+  signing_shared:
+    description: 'true when the build used the shared debug key rather than a throwaway one.'
+    value: ${{ steps.signing.outputs.shared }}
+
+runs:
+  using: composite
+  steps:
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    # Named once, for the APK filename, the version stamped inside it, and the
+    # pull request comment, so all three agree.
+    - name: Name this build
+      id: name
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release_tag }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        PR_SHA: ${{ inputs.pr_sha }}
+      run: |
+        set -euo pipefail
+        version=$(sed -n 's/^val baseVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+        [ -n "$version" ] || { echo "::error::could not read baseVersionName"; exit 1; }
+        built_at=$(date -u +%Y%m%d-%H%MZ)
+
+        if [ -n "$RELEASE_TAG" ]; then
+          # The tag already pins the code, so the filename needs no timestamp or
+          # commit, and the version needs no suffix.
+          label=""
+          apk="oh-tello-$RELEASE_TAG-debug.apk"
+        elif [ -n "$PR_NUMBER" ]; then
+          sha="${PR_SHA:0:7}"
+          label="pr$PR_NUMBER-$sha"
+          apk="oh-tello-pr$PR_NUMBER-$built_at-$sha-debug.apk"
+        else
+          sha="${GITHUB_SHA:0:7}"
+          label="v$version-$sha"
+          apk="oh-tello-v$version-$built_at-$sha-debug.apk"
+        fi
+
+        {
+          echo "label=$label"
+          echo "apk=$apk"
+          echo "built_at=$built_at"
+        } >> "$GITHUB_OUTPUT"
+
+    # Debug builds are signed with a shared key so they replace each other on a
+    # device instead of needing an uninstall between them. It lives in a secret
+    # rather than the repository; without it the build falls back to a throwaway
+    # key, which still works but will not install over anything else.
+    - name: Restore the debug signing key
+      id: signing
+      shell: bash
+      env:
+        DEBUG_KEYSTORE_BASE64: ${{ inputs.keystore_base64 }}
+      run: |
+        set -euo pipefail
+        if [ -z "${DEBUG_KEYSTORE_BASE64:-}" ]; then
+          echo "::warning::DEBUG_KEYSTORE_BASE64 is not set — this build gets a throwaway debug key and will not install over other builds"
+          echo "shared=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "shared=true" >> "$GITHUB_OUTPUT"
+        printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > app/debug.keystore
+
+        # Checked here so a bad keystore says so in one line, rather than as a
+        # Gradle stack trace a minute later. The alias is not incidental: the
+        # signing config asks for the key by that name.
+        keytool -list -keystore app/debug.keystore -storepass android -alias androiddebugkey >/dev/null || {
+          echo "::error::keystore has no key aliased androiddebugkey — see README > Building"
+          exit 1
+        }
+        echo "shared debug key restored"
+
+    - name: Grant execute permission for gradlew
+      shell: bash
+      run: chmod +x gradlew
+
+    - name: Build with Gradle
+      shell: bash
+      env:
+        # Ends up in versionName, so an installed build still knows what it is.
+        # Empty for tagged releases, which carry the plain version.
+        OH_TELLO_BUILD_LABEL: ${{ steps.name.outputs.label }}
+      # `build` deliberately, not just the debug tasks: this also assembles,
+      # dexes and lints the release variant. It costs about 40s and is the only
+      # thing standing between a release-only problem — a proguard rule, a lint
+      # check that only runs on release — and the day you cut a release.
+      run: ./gradlew build
+
+    - name: Rename the APK
+      shell: bash
+      run: mv app/build/outputs/apk/debug/app-debug.apk "${{ steps.name.outputs.apk }}"
