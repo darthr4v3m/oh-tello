@@ -429,23 +429,26 @@ is why every reading is a multiple of 10 and why `height?` answers `4dm` rather 
 centimetres. It cannot be more precise than 10 cm, it is relative to a pressure datum captured at
 takeoff, it drifts over a flight, and it can legitimately go negative.
 
-**It is a fixed offset, not a scale — settled.** One airborne sample could not tell `h = true / 2`
-from `h = true - 38 cm`, since both predict 40 at a true 80. A flight recording on 16 August
-answered it with 108 samples across the whole altitude range:
+**It is an offset, not a scale — settled.** One airborne sample could not tell `h = true / 2` from
+`h = true - 38 cm`, since both predict 40 at a true 80. A flight recording answered it with 108
+samples across the whole altitude range:
 
 | | mean | spread |
 | --- | --- | --- |
 | `tof - h` | 35.3 cm | **15%** |
 | `h / tof` | 0.32 | 92% |
 
-The difference holds steady from 10 cm to 150 cm while the ratio collapses from 0.75 to 0. **`h`
-reads about 35 cm less than the truth, at every height.** Which is the dangerous answer, and it is
-no longer a prediction:
+The difference holds steady from 10 cm to 150 cm while the ratio collapses from 0.75 to 0.
 
-> In that same recording the drone hovered at `tof` 27-37 for **sixteen seconds** with the motors
-> running — `time` advanced from 31 to 47 — and `h` read **0** for all 32 samples of it.
+**But the size of the offset is not a constant — it is set fresh at every takeoff.** Three flights on
+16 August measured 35.3, 12.2 and about 10 cm, each tight within itself and wildly different from the
+others. That is what a corrupted takeoff datum predicts: latched once while the props spin up, held
+for the rest of the flight, different every time.
 
-An aircraft in the air, reported as sitting on the ground.
+Which makes `h` worse than a merely inaccurate reading. There is **no height below which it can be
+trusted and no way to know in advance when it will read 0 on a flying drone** — on the 35 cm flight a
+30 cm hover showed `h` 0; on the 12 cm flight the same hover showed 20. One recording has the drone
+holding 30 cm with the motors running for sixteen seconds while `h` read 0 throughout.
 
 ### The airborne gate
 

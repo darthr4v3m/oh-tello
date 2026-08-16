@@ -14,15 +14,23 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A: 18 of 20** — A11 and A12 need re-running, the airborne gate beneath them was rewritten.
-Part B: **B1, B2, B3, B14 pass**, **B8 needs a full run** (it grew a second half), nine others left.
+**Part A: 18 of 20** — A11 and A12 passed on `229dd1e`, see their notes; every other Part A result
+predates the airborne-gate rewrite but is unaffected by it.
+**Part B: B1-B9 and B14 pass.** Left: **B10, B11, B12, B13, B15**, then Part C. B8 part two is a
+post-flight check rather than a test you can stage.
 
-**The finding that drove the last round of changes:** `h` reads about 35 cm low at every height —
-a fixed offset, settled by the flight recorder, see B14. So `h` reads 0 for any hover below ~35 cm,
-and on 16 Aug the drone hovered at 30 cm with motors running while `h` said 0 for sixteen seconds
-and neither warning fired. **Now fixed** — the app judges airborne from the motor-on counter, with
-height as a backstop. A11, A12 and B8 are the tests that cover it, and all three need running on a
-build from `f9c3f0c` onwards.
+**Findings carried forward from this run:**
+
+- **`h` reads low by an amount that is fixed within a flight but varies between them** — 35 cm on
+  one flight, 10-12 cm on two others. So there is no safe height below which `h` can be trusted, and
+  no way to predict when it will read 0 on a flying drone. The app no longer relies on it alone; see
+  B14 and the README under *The airborne gate*.
+- **The drone refuses to descend below about 28 cm, and says nothing** — it stops, hovers, and never
+  answers the command. Seen three times (`down 50`, `down 20`, `down 100`). The scaled movement
+  timeout is what returns control, in 4-8 s rather than 20.
+- **Export pairs the newest console log with the newest recording independently**, so exporting
+  right after a fresh launch can pair a new empty log with an older CSV. Cosmetic; on the triage
+  list.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -142,13 +150,13 @@ reports height 0.
 **The airborne half of this is B8** — that is where the banner should appear, and where tapping a
 direction must clear it. The keepalives must never clear it, which is why the idle clock counts
 only commands you send.
-- [ ] Pass — notes: `RE-RUN NEEDED - the airborne gate was rewritten after this passed`
+- [x] Pass — notes: `re-run on 229dd1e after the gate rewrite: still silent on the table`
 
 ### A12 — Backgrounding on the ground does NOT nag
 **Do:** with the drone connected and sitting on the floor, press Home. Wait 10 seconds.
 **Expect:** **no** notification — telemetry says height 0, so there is nothing to warn about.
 Reopen the app: the console shows the keepalive stopped and resumed.
-- [ ] Pass — notes: `RE-RUN NEEDED - the airborne gate was rewritten after this passed`
+- [x] Pass — notes: `re-run on 229dd1e: no notification, keepalive stopped and resumed`
 
 ### A13 — Movement is rejected on the ground
 **Do:** tap **forward**.
@@ -252,40 +260,40 @@ a bug.
 ### B4 — Step size
 **Do:** select 100 cm, press forward. Then 20 cm, press back twice.
 **Expect:** distances scale accordingly; the centre of the D-pad shows the selected step.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `100cm ~5x the 20cm hop; D-pad centre tracks the step. 2nd back-20 hard to see, drone acked it`
 
 ### B5 — Yaw
 **Do:** select 90°, press **cw**, then **ccw**.
 **Expect:** the drone rotates in place, about a quarter turn each way. Position holds.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `cw 90 -> yaw +89, ccw 90 -> -89, cw 180 -> +179; altitude held within 2cm`
 
 ### B6 — Controls lock during a command
 **Do:** press forward 100 cm and watch the D-pad while it runs.
 **Expect:** the movement buttons grey out until the drone answers, then come back. **Land stays
 available the whole time** — check it is not greyed.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `pad greyed, LAND stayed live, 'waiting for the drone' shown, over a 3.6s forward 100`
 
 ### B7 — Land works while the drone is busy
 **Do:** press **forward 100**, and while it is still moving press **LAND**.
 **Expect:** it lands promptly — it should not wait for the move to finish. Console shows land
 jumping the queue.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `land 1/3 sent 1.0s into an unanswered forward 100; drone replied `error Auto land``
 
-### B8 — Idle banner in the air, including a low hover
+### B8 — Idle banner in the air
 **Do, part one:** hover at a normal height and touch nothing for ~15 seconds. Then press a
 direction.
 **Expect:** the banner appears, the drone keeps hovering (the keepalive is holding it up), and the
 direction press clears it.
+- [x] Pass — notes: `banner appeared, direction press cleared it (16 Aug)`
 
-**Do, part two — this is the one that matters.** Descend until the **height** readout shows **0**
-while the drone is clearly still in the air (`tof` will read about 30). Now touch nothing for ~15
-seconds.
-**Expect:** the banner still appears. Height reads 0 because `h` runs about 35 cm low; the app now
-decides using the motor-on counter instead, so a hovering drone is treated as flying whatever the
-height says.
-**This is a regression test for a real failure:** on 16 Aug the drone held 30 cm with the motors
-running for sixteen seconds, `h` read 0 throughout, and no banner appeared.
-- [ ] Pass — notes: `______________________`
+**Part two — check after the fact, do not try to stage it.** The failure this guards against is a
+hover where **height reads 0 while the drone is flying**. Whether that is even reachable depends on
+the takeoff datum error, which varies per flight and nobody controls: measured at 35 cm on one
+flight and 10 cm on another. At 35 cm a 30 cm hover shows `h` 0; at 10 cm the same hover shows 20.
+**So:** after any flight, look in the recorder for rows where `h` is 0 while `time` is still
+advancing. If you find some, and you were not touching the controls for 12 seconds during them, the
+banner should have been up. Asking a pilot to produce that condition on demand does not work.
+- [ ] Checked — notes: `______________________`
 
 ### B9 — The one that matters: background while flying
 **Do:** hover at about 1 m. Press **Home** (or lock the phone). **Watch the drone, not the phone.**
@@ -294,7 +302,7 @@ running for sixteen seconds, `h` read 0 throughout, and no banner appeared.
 - the drone begins descending roughly 10–15 seconds after you left the app
 - it lands under control, not a drop
 **Then:** tap the notification — the app reopens and the console shows the keepalive resumed.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `notification appeared, controlled landing, keepalive resumed at 17:29:50.126`
 
 ### B10 — Coming straight back does not land it
 **Do:** hover, press Home, and return to the app within ~3 seconds.
@@ -348,6 +356,25 @@ millisecond resolution instead of human reaction time.
 
 Still do one run with eyes and a stopwatch as well. The recorder is new and unproven on a real
 flight, and this measurement is the one the app's wording depends on.
+
+**A measurement already exists, taken for free during B9 on 16 Aug.** The app is frozen by Android
+while backgrounded, so the recorder cannot watch the landing — but `time` is cumulative, so the
+moment the motors stopped can be reconstructed afterwards:
+
+```
+17:29:26.117  last command reached the drone (a keepalive)
+17:29:34.534  last sample before Android froze the app — hovering, time=14
+17:29:50.186  app returns — landed, time=24
+```
+
+Ten more motor-seconds after the last live sample puts touchdown at ~17:29:44.6, so **silence to
+motors-off was about 18.5 s**. That figure includes the descent itself (~4-5 s from a metre), which
+puts the failsafe trigger at **roughly 14 s** — essentially the documented 15.
+
+**This also explains the 23.2 s that started the confusion:** that measured the drone still
+*answering* after 23 s, and a landed Tello answers perfectly well. It was never a measure of
+flight. Run this test deliberately to confirm, but the earlier suspicion of a 30 s failsafe looks
+like an artefact of measuring the wrong thing.
 - [ ] Done — result fed back into the app's wording
 
 ### B14 — Is the height error a scale or an offset?
