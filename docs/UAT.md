@@ -14,10 +14,8 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Result
 
-**Part A 20/20. Part B 15/15. Part C: C2 done, C1 outstanding.**
-
-The only check left is **C1** — the red *"Battery at N% — land it."* line, which needs the drone
-below 20% and so has to be caught opportunistically rather than staged.
+**Complete. Part A 20/20, Part B 15/15, Part C 2/2**, on a Ryze Tello flown from a Pixel 7 running
+Android 17 — the device the official app cannot launch on.
 
 Part B was run frozen at `229dd1e`, deliberately: every fix during the earlier rounds invalidated
 tests that had already passed, so the code was pinned and defects were written down rather than
@@ -394,8 +392,8 @@ want independent corroboration.
 
 ### C1 — Battery warning
 **Do:** at some point when the drone is below 20%, look at the telemetry card.
-**Expect:** a red "Battery at N% — land it." line.
-- [ ] Pass — notes: `______________________`
+**Expect:** a red "Battery at N% — land it." line, with the number matching the readout above it.
+- [x] Pass — notes: `appeared under 20%, number matched; 165 samples below threshold on 16 Aug`
 
 ### C2 — Collect the evidence
 **Do:** tap **Share**, send the log to yourself.
