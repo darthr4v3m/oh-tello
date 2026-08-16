@@ -91,8 +91,10 @@ git tag v0.1.0 && git push origin v0.1.0
 Or, with no checkout to hand: **Actions → Release → Run workflow**, on `main`, with the version in
 the box. Tick **dry_run** to check and build without creating anything — it answers "is main
 releasable?" without spending a version number on finding out, which is the one question worth
-asking before a release rather than after. The build runs first and the tag is created only if it passes, so a release can never point
-at a commit that failed to compile. It refuses a tag that already exists, a tag that does not start
+asking before a release rather than after.
+
+Either way the build runs first and the tag is created only if it passes, so a release can never
+point at a commit that failed to compile. It refuses a tag that already exists, a tag that does not start
 with `v`, and any branch other than `main` — none of which a plain `git tag && git push` checks.
 Triggering a workflow needs write access on the repository, the same as pushing a tag, so this route
 is open to exactly the same people and no one else.
