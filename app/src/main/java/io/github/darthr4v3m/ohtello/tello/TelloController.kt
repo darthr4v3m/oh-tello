@@ -214,11 +214,11 @@ class TelloController(
 
     /** Discrete `up|down|left|right|forward|back <cm>`; distance is clamped. */
     suspend fun move(direction: MoveDirection, distanceCm: Int): TelloResponse =
-        sendCommand(TelloCommands.move(direction, distanceCm), MOVE_TIMEOUT_MS)
+        sendCommand(TelloCommands.move(direction, distanceCm), moveTimeoutMillis(distanceCm))
 
     /** Discrete `cw|ccw <degrees>`; angle is clamped. */
     suspend fun turn(direction: TurnDirection, degrees: Int): TelloResponse =
-        sendCommand(TelloCommands.turn(direction, degrees), MOVE_TIMEOUT_MS)
+        sendCommand(TelloCommands.turn(direction, degrees), turnTimeoutMillis(degrees))
 
     /**
      * Sends one command and waits for its reply, serialised against every other
@@ -602,11 +602,47 @@ class TelloController(
         const val LAND_TIMEOUT_MS = 15_000L
 
         /**
-         * A long `move` at a slow speed setting can take a while, and a timeout
-         * here does not stop the drone — it only means we stopped listening, so
-         * being generous costs nothing.
+         * How long to wait for a movement to be acknowledged, scaled to how far
+         * it has to go.
+         *
+         * A flat twenty seconds was wrong, and a real flight showed why. Ordered
+         * `down 50` from about 50cm up, the drone descended to its minimum
+         * altitude, stopped, and then never answered at all — it hovered there
+         * with the motors running while the app waited out the full timeout. The
+         * pilot lost every movement control for seventeen seconds and reached
+         * for the emergency cut, which is the wrong reason to press that button.
+         *
+         * Being generous does not cost nothing after all. The reply waiter holds
+         * the send queue, so a move that hangs also silences the keepalive for
+         * as long as it waits.
+         *
+         * Measured on that flight: 30cm took 1.5-2.2s, 100cm took 2.7s. That is
+         * roughly a second of overhead plus 65cm/s. Budgeting four seconds plus
+         * 25cm/s leaves better than double the margin at every distance while
+         * handing control back in about five seconds rather than twenty.
          */
-        const val MOVE_TIMEOUT_MS = 20_000L
+        const val MOVE_BASE_TIMEOUT_MS = 4_000L
+        const val MOVE_MILLIS_PER_CM = 40L
+
+        /**
+         * The longest any movement may block the queue. Below the drone's own
+         * failsafe, whatever that turns out to be — a hang must not be able to
+         * hold the keepalive off for longer than the drone will tolerate.
+         */
+        const val MOVE_TIMEOUT_CEILING_MS = 15_000L
+
+        /** Yaw is quick — a full turn is a few seconds — but give it the same floor. */
+        const val TURN_MILLIS_PER_DEGREE = 25L
+
+        /** The budget for `up|down|left|right|forward|back <distanceCm>`. */
+        fun moveTimeoutMillis(distanceCm: Int): Long =
+            (MOVE_BASE_TIMEOUT_MS + distanceCm.coerceAtLeast(0) * MOVE_MILLIS_PER_CM)
+                .coerceAtMost(MOVE_TIMEOUT_CEILING_MS)
+
+        /** The budget for `cw|ccw <degrees>`. */
+        fun turnTimeoutMillis(degrees: Int): Long =
+            (MOVE_BASE_TIMEOUT_MS + degrees.coerceAtLeast(0) * TURN_MILLIS_PER_DEGREE)
+                .coerceAtMost(MOVE_TIMEOUT_CEILING_MS)
 
         /** Short: if the drone is not there, saying so quickly is the useful answer. */
         const val HANDSHAKE_TIMEOUT_MS = 5_000L

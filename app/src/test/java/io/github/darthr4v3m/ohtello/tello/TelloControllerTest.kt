@@ -347,6 +347,51 @@ class TelloControllerTest {
     }
 
     @Test
+    fun `a movement that is never answered gives the controls back quickly`() = runBlocking {
+        // What a real flight did: ordered `down 50` near the floor, the drone
+        // stopped at its minimum altitude and never replied at all, still
+        // hovering. The old flat 20s budget took every movement control away
+        // for that whole time — and held the keepalive behind it.
+        drone.responder = { command -> if (command.startsWith("down")) null else "ok" }
+        assertTrue(controller.connect())
+
+        val elapsed = measureTimeMillis { controller.move(MoveDirection.DOWN, 50) }
+
+        val budget = TelloController.moveTimeoutMillis(50)
+        assertTrue("a 50cm move should not budget ${budget}ms", budget < 7_000)
+        assertTrue("waited ${elapsed}ms for a 50cm move", elapsed < budget + 1_000)
+    }
+
+    @Test
+    fun `the movement budget scales with the distance and is capped`() {
+        // Measured on a real flight: 30cm took 1.5-2.2s, 100cm took 2.7s. Every
+        // budget has to clear that comfortably without approaching the drone's
+        // own failsafe, which a hung move would otherwise hold the keepalive off
+        // past.
+        val short = TelloController.moveTimeoutMillis(20)
+        val long = TelloController.moveTimeoutMillis(100)
+        assertTrue("a short hop should give up sooner than a long one", short < long)
+        assertTrue("20cm budget was ${short}ms", short in 4_000..6_000)
+        assertTrue("100cm budget was ${long}ms", long in 7_000..10_000)
+
+        // The longest move the UI offers is 500cm, which is where the cap bites.
+        assertEquals(
+            TelloController.MOVE_TIMEOUT_CEILING_MS,
+            TelloController.moveTimeoutMillis(500),
+        )
+        // A full turn does not reach the cap. Its budget is deliberately loose:
+        // no flight has measured yaw yet, and being generous where there is no
+        // data is safer than guessing tight.
+        val fullTurn = TelloController.turnTimeoutMillis(360)
+        assertTrue("full turn budget was ${fullTurn}ms", fullTurn < TelloController.MOVE_TIMEOUT_CEILING_MS)
+        assertTrue("full turn budget was ${fullTurn}ms", fullTurn > 8_000)
+
+        // Nothing may outlast the shortest failsafe the drone is documented to
+        // have, since a waiting move holds the keepalive behind it.
+        assertTrue(TelloController.MOVE_TIMEOUT_CEILING_MS <= 15_000)
+    }
+
+    @Test
     fun `a drone on the ground is not idly hovering`() = runBlocking {
         assertTrue(controller.connect())
         // Telemetry says height 0: the drone is on the table, so going quiet is

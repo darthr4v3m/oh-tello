@@ -177,6 +177,7 @@ fun TelloScreen(
 
             MovementCard(
                 canFly = canFly,
+                waiting = connected && busy,
                 stepCm = stepCm,
                 turnDegrees = turnDegrees,
                 onStepChange = viewModel::setStepCm,
@@ -508,6 +509,7 @@ private fun FlightCard(
 @Composable
 private fun MovementCard(
     canFly: Boolean,
+    waiting: Boolean,
     stepCm: Int,
     turnDegrees: Int,
     onStepChange: (Int) -> Unit,
@@ -516,7 +518,25 @@ private fun MovementCard(
     onTurn: (TurnDirection) -> Unit,
 ) {
     SectionCard {
-        Text("Move", style = MaterialTheme.typography.titleMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Move", style = MaterialTheme.typography.titleMedium)
+            // The drone answers one command at a time, so these buttons go dead
+            // while one is in flight. Greying out without a word reads as a
+            // frozen app — a pilot watching a hovering drone deserves to know
+            // the difference between "wait" and "broken", and that Land still
+            // works either way.
+            if (waiting) {
+                Text(
+                    text = "waiting for the drone… Land still works",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
 
         OptionRow(
             options = TelloViewModel.STEP_OPTIONS_CM,
