@@ -88,6 +88,13 @@ Pushing to `main` builds and tests but publishes nothing. Cutting a release is a
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
+Or, with no checkout to hand: **Actions → Android CI → Run workflow**, on `main`, with the tag in the
+**release_tag** box. The workflow builds first and creates the tag only if that succeeds, so a
+release never points at a commit that failed to compile. It refuses a tag that already exists, a tag
+that does not start with `v`, and any branch other than `main`. Triggering a workflow needs write
+access on the repository, the same as pushing a tag, so this route is open to exactly the same
+people and no one else.
+
 Tap the link on the phone and Android offers to install it; no zip to unpack and no sign-in, since
 release assets on a public repo are served directly. Android will ask you to allow installs from
 your browser the first time. From a desktop, `adb install app-debug.apk` does the same job.

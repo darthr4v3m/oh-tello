@@ -19,7 +19,17 @@ on:
     branches: [ "main" ]
   # Builds an APK from any branch on demand, as an artifact. Deliberately does
   # not publish: an arbitrary branch has no release worth naming.
+  #
+  # Unless a tag is given, in which case this cuts a release. Pushing a v* tag
+  # is still the normal way; this exists because a maintainer without a local
+  # checkout otherwise cannot release at all, and "wait until you are at a
+  # computer" is a poor reason to hold a build.
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Cut a release at this tag, e.g. v0.1.0. Leave empty to only build.'
+        required: false
+        default: ''
 
 # Pushes in quick succession overlap, and a slower older run finishing last
 # leaves the release asset and the PR comment pointing at an older build than
@@ -46,6 +56,41 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    # One answer to "is this a release, and under what name", so that the build
+    # name and the publish step cannot disagree about it. Resolved before the
+    # build; the tag itself is only created afterwards, so a failing build does
+    # not leave a tag behind pointing at something that never compiled.
+    - name: Resolve the release tag
+      id: release
+      env:
+        INPUT_TAG: ${{ inputs.release_tag }}
+      run: |
+        set -euo pipefail
+        if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        tag="${INPUT_TAG:-}"
+        if [ -z "$tag" ]; then
+          echo "tag=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        case "$tag" in
+          v*) ;;
+          *) echo "::error::a release tag has to start with v; got '$tag'"; exit 1 ;;
+        esac
+
+        # Releases come from main. Tagging an arbitrary branch would produce a
+        # permanent release of code that was never merged.
+        if [ "$GITHUB_REF_NAME" != "main" ]; then
+          echo "::error::releases are cut from main; this run is on '$GITHUB_REF_NAME'"
+          exit 1
+        fi
+
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
     # Names the build once, for the APK filename, the version stamped inside it,
     # and the PR comment, so all three agree.
     - name: Name this build
@@ -54,6 +99,7 @@ jobs:
         EVENT: ${{ github.event_name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
       run: |
         set -euo pipefail
         version=$(sed -n 's/^val baseVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
@@ -64,11 +110,11 @@ jobs:
           sha="${HEAD_SHA:0:7}"
           label="pr$PR_NUMBER-$sha"
           apk="oh-tello-pr$PR_NUMBER-$built_at-$sha-debug.apk"
-        elif [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ]; then
+        elif [ -n "${RELEASE_TAG:-}" ]; then
           # A tagged release. The tag already pins the code, so the filename
           # needs no timestamp or commit, and the version needs no suffix.
           label=""
-          apk="oh-tello-$GITHUB_REF_NAME-debug.apk"
+          apk="oh-tello-$RELEASE_TAG-debug.apk"
         else
           sha="${GITHUB_SHA:0:7}"
           label="v$version-$sha"
@@ -135,12 +181,29 @@ jobs:
     # nothing, so a release is never quietly replaced by the next merge.
     # Fork pull requests are skipped too: their tokens are read-only, so
     # publishing would fail the build rather than just not happening.
+    # Only after the build has passed. A tag is permanent and a release points
+    # at it, so neither should exist for a commit that failed to compile.
+    - name: Create the release tag
+      if: github.event_name == 'workflow_dispatch' && steps.release.outputs.tag != ''
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAG: ${{ steps.release.outputs.tag }}
+      run: |
+        set -euo pipefail
+        if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+          echo "::error::$TAG already exists. A release is a fixed thing — pick a new version rather than moving this one."
+          exit 1
+        fi
+        gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+          -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA" >/dev/null
+        echo "created $TAG at $GITHUB_SHA"
+
     - name: Publish the APK
       id: publish
       if: >-
         (github.event_name == 'pull_request' &&
          github.event.pull_request.head.repo.full_name == github.repository)
-        || startsWith(github.ref, 'refs/tags/v')
+        || steps.release.outputs.tag != ''
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         REPO: ${{ github.repository }}
@@ -148,6 +211,7 @@ jobs:
         PR_NUMBER: ${{ github.event.pull_request.number }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         APK: ${{ steps.name.outputs.apk }}
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
       run: |
         set -euo pipefail
         if [ "$EVENT" = "pull_request" ]; then
@@ -161,8 +225,8 @@ jobs:
           notes='Test build for this pull request, replaced on every push. Debug-signed,
         so it installs without a keystore and is not suitable for distribution.'
         else
-          tag="$GITHUB_REF_NAME"
-          title="Oh-Tello $GITHUB_REF_NAME"
+          tag="$RELEASE_TAG"
+          title="Oh-Tello $RELEASE_TAG"
           target="$GITHUB_SHA"
           rolling=0
           extra=(--latest)
