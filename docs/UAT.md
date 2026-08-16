@@ -14,14 +14,15 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is complete — 20 of 20.** Part B: **B1, B2, B3 and B14 pass**, B8 is half done, ten left.
-**Resume at B4.**
+**Part A: 18 of 20** — A11 and A12 need re-running, the airborne gate beneath them was rewritten.
+Part B: **B1, B2, B3, B14 pass**, **B8 needs a full run** (it grew a second half), nine others left.
 
-**The one finding to carry forward:** `h` reads about 35 cm low at every height — settled by the
-recorder, see B14. That is a fixed offset, so `h` reads 0 for any hover below ~35 cm, and a real
-flight showed the drone hovering at 30 cm with motors running while `h` said 0 for sixteen
-seconds. The idle banner and the background notification both key off `h <= 0`, so **both go
-silent on a low hover**. Not fixed; the intended change is in the README under *The airborne gate*.
+**The finding that drove the last round of changes:** `h` reads about 35 cm low at every height —
+a fixed offset, settled by the flight recorder, see B14. So `h` reads 0 for any hover below ~35 cm,
+and on 16 Aug the drone hovered at 30 cm with motors running while `h` said 0 for sixteen seconds
+and neither warning fired. **Now fixed** — the app judges airborne from the motor-on counter, with
+height as a backstop. A11, A12 and B8 are the tests that cover it, and all three need running on a
+build from `f9c3f0c` onwards.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -141,13 +142,13 @@ reports height 0.
 **The airborne half of this is B8** — that is where the banner should appear, and where tapping a
 direction must clear it. The keepalives must never clear it, which is why the idle clock counts
 only commands you send.
-- [x] Pass — notes: `no banner after 20s on the table - verifies the 00837e5 fix`
+- [ ] Pass — notes: `RE-RUN NEEDED - the airborne gate was rewritten after this passed`
 
 ### A12 — Backgrounding on the ground does NOT nag
 **Do:** with the drone connected and sitting on the floor, press Home. Wait 10 seconds.
 **Expect:** **no** notification — telemetry says height 0, so there is nothing to warn about.
 Reopen the app: the console shows the keepalive stopped and resumed.
-- [x] Pass — notes: `no notification; console showed keepalive stopped then resumed`
+- [ ] Pass — notes: `RE-RUN NEEDED - the airborne gate was rewritten after this passed`
 
 ### A13 — Movement is rejected on the ground
 **Do:** tap **forward**.
@@ -270,13 +271,21 @@ available the whole time** — check it is not greyed.
 jumping the queue.
 - [ ] Pass — notes: `______________________`
 
-### B8 — Idle banner in the air
-**Do:** hover and touch nothing for ~15 seconds.
-**Expect:** the banner appears; the drone keeps hovering (the keepalive is holding it up). Press a
-direction; banner clears.
-**Half done:** the banner appeared in the air on 16 Aug and the drone kept hovering while it
-showed. Clearing it with a direction press has still only been seen on the ground (A11).
-- [ ] Pass — notes: `banner appears: yes. cleared by a direction press in the air: not yet`
+### B8 — Idle banner in the air, including a low hover
+**Do, part one:** hover at a normal height and touch nothing for ~15 seconds. Then press a
+direction.
+**Expect:** the banner appears, the drone keeps hovering (the keepalive is holding it up), and the
+direction press clears it.
+
+**Do, part two — this is the one that matters.** Descend until the **height** readout shows **0**
+while the drone is clearly still in the air (`tof` will read about 30). Now touch nothing for ~15
+seconds.
+**Expect:** the banner still appears. Height reads 0 because `h` runs about 35 cm low; the app now
+decides using the motor-on counter instead, so a hovering drone is treated as flying whatever the
+height says.
+**This is a regression test for a real failure:** on 16 Aug the drone held 30 cm with the motors
+running for sixteen seconds, `h` read 0 throughout, and no banner appeared.
+- [ ] Pass — notes: `______________________`
 
 ### B9 — The one that matters: background while flying
 **Do:** hover at about 1 m. Press **Home** (or lock the phone). **Watch the drone, not the phone.**

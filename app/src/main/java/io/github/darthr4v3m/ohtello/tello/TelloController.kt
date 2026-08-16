@@ -103,6 +103,15 @@ class TelloController(
     private val _pilotIdle = MutableStateFlow(false)
     val pilotIdle: StateFlow<Boolean> = _pilotIdle.asStateFlow()
 
+    /**
+     * Whether the drone is judged to be in the air. One definition, shared by
+     * everything that needs to know — the idle banner here and the backgrounding
+     * notification in the UI both used to carry their own copy, and a copy is
+     * one more place for the two to disagree. See [judgeAirborne].
+     */
+    private val _airborne = MutableStateFlow(false)
+    val airborne: StateFlow<Boolean> = _airborne.asStateFlow()
+
     private val commandMutex = Mutex()
     private val logIds = AtomicLong(0)
 
@@ -114,6 +123,8 @@ class TelloController(
     @Volatile private var lastPilotCommandAtMillis: Long = 0
     @Volatile private var operatorPresent: Boolean = true
     @Volatile private var lastStateAtMillis: Long = 0
+    @Volatile private var lastMotorSeconds: Int? = null
+    @Volatile private var lastMotorAdvanceAtMillis: Long = 0
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -395,11 +406,65 @@ class TelloController(
             lastStateAtMillis = clock()
             _telemetryFresh.value = true
             _state.value = parsed
+            noteMotorTime(parsed.flightTimeSeconds)
             // Decimated and capped inside the store, so this stays cheap at the
             // ~10 Hz the drone pushes. Its own lock, not the console's: this
             // must never contend with a command waiting to go out.
             telemetryLog?.append(parsed)
         }
+    }
+
+    /**
+     * Watches the drone's motor-on counter for movement.
+     *
+     * The counter never resets and only ever advances while the props turn, so
+     * the *value* says nothing useful but a *change* means the motors are
+     * running right now. The first reading of a session only sets the baseline:
+     * connecting to a drone that has flown before finds a large number sitting
+     * still, and that is a landed drone, not a flying one.
+     *
+     * A decrease would mean the drone rebooted under us; count it as movement,
+     * because guessing "landed" there is the dangerous way to be wrong.
+     */
+    private fun noteMotorTime(seconds: Int?) {
+        if (seconds == null) return
+        val previous = lastMotorSeconds
+        if (previous != null && seconds != previous) lastMotorAdvanceAtMillis = clock()
+        lastMotorSeconds = seconds
+    }
+
+    /**
+     * Whether the drone should be treated as in the air.
+     *
+     * Three signals, OR'd, and the asymmetry is the whole design: a false
+     * "airborne" costs a warning nobody needed, a false "on the ground" costs
+     * silence about an aircraft that is about to put itself down. Every term
+     * here errs the harmless way.
+     *
+     * - **Motors turning.** `time` is DJI's own motor-on counter, so a value
+     *   that advanced recently means the props are spinning. It is the only
+     *   signal that does not go through an altitude estimate, and it is the one
+     *   that catches the case that broke us.
+     * - **Height above zero.** A second, independent opinion for anything the
+     *   barometer can see. Kept as a backstop in case `time` behaves differently
+     *   on other firmware, since only one flight has been examined.
+     * - **Nothing known.** No telemetry yet, or a packet without `h`: warn.
+     *
+     * `h` alone used to decide this, and it was wrong. It reads about 35cm low —
+     * a fixed offset, settled by 108 samples across a real descent — so it
+     * reports 0 for any hover below that. One recording has the drone holding
+     * 30cm with the motors running, for sixteen seconds, while `h` said 0 and
+     * neither warning fired.
+     */
+    private fun judgeAirborne(): Boolean {
+        val sinceMotorsMoved = clock() - lastMotorAdvanceAtMillis
+        val motorsRunning = lastMotorAdvanceAtMillis != 0L &&
+            sinceMotorsMoved < MOTORS_RUNNING_WINDOW_MS
+        if (motorsRunning) return true
+
+        // Null covers both "no packet yet" and "this firmware omits `h`".
+        val height = _state.value?.heightCm ?: return true
+        return height > 0
     }
 
     private suspend fun trackTelemetryFreshness() {
@@ -413,26 +478,12 @@ class TelloController(
             // what it is for.
             val idleFor = clock() - lastPilotCommandAtMillis
 
-            // A drone on the table is not hovering on borrowed time, and saying
-            // so while it sits there is both wrong and a way to teach the pilot
-            // to ignore the warning. Same rule as the background notification:
-            // silent only when telemetry actually says it is down, since an
-            // unknown height is better warned about than assumed safe.
-            //
-            // KNOWN BROKEN, deliberately left until it can be tested properly.
-            // `h` reads about 35cm low at every height — a fixed offset, not a
-            // scale, settled by 108 samples from a real descent. So `h` is 0
-            // for any hover below ~35cm: one recording has the drone holding
-            // 30cm with the motors running while this reads it as parked, for
-            // sixteen seconds, with no warning shown. The fix is in the README
-            // under "The airborne gate"; it needs its own tests and its own
-            // pass through the UAT.
-            val onTheGround = _state.value?.heightCm?.let { it <= 0 } == true
+            _airborne.value = judgeAirborne()
 
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&
                 lastPilotCommandAtMillis != 0L &&
                 idleFor >= idleWarningMillis &&
-                !onTheGround
+                _airborne.value
 
             delay(FRESHNESS_TICK_MS)
         }
@@ -569,7 +620,10 @@ class TelloController(
         lastStateAtMillis = 0
         lastCommandAtMillis = 0
         lastPilotCommandAtMillis = 0
+        lastMotorSeconds = null
+        lastMotorAdvanceAtMillis = 0
         _pilotIdle.value = false
+        _airborne.value = false
     }
 
     private fun log(kind: CommandLogEntry.Kind, text: String) {
@@ -653,6 +707,15 @@ class TelloController(
 
         /** Telemetry arrives ~10x/sec, so 2s of silence means something is wrong. */
         const val STALE_TELEMETRY_MS = 2_000L
+
+        /**
+         * How long after the motor counter last moved the props still count as
+         * turning. The counter has one-second resolution, so anything under two
+         * seconds would flicker; three leaves room for a dropped packet. The
+         * cost is reading "airborne" for about three seconds after touchdown,
+         * which is the harmless direction.
+         */
+        const val MOTORS_RUNNING_WINDOW_MS = 3_000L
 
         /** Well inside the drone's 15s auto-land timer. */
         const val KEEPALIVE_INTERVAL_MS = 5_000L

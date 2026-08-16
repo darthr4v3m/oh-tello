@@ -5,6 +5,8 @@ import io.github.darthr4v3m.ohtello.tello.protocol.TelloResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlin.system.measureTimeMillis
@@ -394,14 +396,93 @@ class TelloControllerTest {
     @Test
     fun `a drone on the ground is not idly hovering`() = runBlocking {
         assertTrue(controller.connect())
-        // Telemetry says height 0: the drone is on the table, so going quiet is
-        // not something to warn about, and claiming it is hovering is a lie.
-        drone.pushState("h:0;bat:72;tof:10;time:0;")
-        delay(300)
+        // Telemetry says height 0 and the motor counter is not moving: the drone
+        // is on the table, so going quiet is not something to warn about, and
+        // claiming it is hovering is a lie.
+        repeat(4) {
+            drone.pushState("h:0;bat:72;tof:10;time:0;")
+            delay(150)
+        }
+
+        assertFalse("thought a parked drone was flying", controller.airborne.value)
 
         delay(IDLE_WARNING_MS + 1_000)
 
         assertFalse("warned about a grounded drone", controller.pilotIdle.value)
+    }
+
+    @Test
+    fun `a low hover is airborne even though the height reads zero`() = runBlocking {
+        // The case that made this necessary. On a real flight the drone held
+        // about 30cm with the motors running for sixteen seconds while `h` read
+        // 0 — it reads roughly 35cm low — and both warnings stayed silent.
+        assertTrue(controller.connect())
+
+        var motorSeconds = 31
+        val telemetry = launch {
+            while (isActive) {
+                drone.pushState("h:0;bat:45;tof:30;time:${motorSeconds++};")
+                delay(200)
+            }
+        }
+
+        awaitAirborne(true)
+        awaitIdle(true)
+
+        telemetry.cancel()
+    }
+
+    @Test
+    fun `a drone that has flown before is not airborne just because the counter is large`() =
+        runBlocking {
+            // `time` never resets, so connecting to a drone that flew earlier
+            // finds a big number sitting still. Still means still.
+            assertTrue(controller.connect())
+            repeat(4) {
+                drone.pushState("h:0;bat:45;tof:10;time:847;")
+                delay(150)
+            }
+
+            assertFalse("a frozen counter is not a running motor", controller.airborne.value)
+        }
+
+    @Test
+    fun `motors that stop are noticed, and the warning goes quiet`() = runBlocking {
+        assertTrue(controller.connect())
+
+        var motorSeconds = 10
+        repeat(4) {
+            drone.pushState("h:0;bat:45;tof:30;time:${motorSeconds++};")
+            delay(150)
+        }
+        awaitAirborne(true)
+
+        // Touchdown: the counter freezes where it stopped.
+        repeat(8) {
+            drone.pushState("h:0;bat:45;tof:10;time:$motorSeconds;")
+            delay(300)
+        }
+
+        awaitAirborne(false)
+    }
+
+    @Test
+    fun `telemetry that says nothing is treated as airborne`() = runBlocking {
+        // No packet, or a packet without `h`: warn rather than assume the drone
+        // is safely parked. Silence about a flying drone is the costly mistake.
+        assertTrue(controller.connect())
+        assertTrue("assumed grounded with no telemetry at all", controller.airborne.value)
+
+        drone.pushState("bat:45;tof:30;")
+        delay(300)
+
+        assertTrue("assumed grounded with no height field", controller.airborne.value)
+    }
+
+    private suspend fun awaitAirborne(expected: Boolean) {
+        withTimeout(8_000) {
+            while (controller.airborne.value != expected) delay(50)
+        }
     }
 
     @Test

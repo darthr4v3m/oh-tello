@@ -160,10 +160,11 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (controller.connection.value !is ConnectionState.Connected) return
-        // Height reads 0 on the ground, so a drone sitting there earns no
-        // warning. Unknown height does: better a needless nudge than silence.
-        val height = controller.state.value?.heightCm
-        if (height != null && height <= 0) return
+        // A drone sitting on the floor earns no warning. This used to test the
+        // height itself and got it wrong, because `h` reads 0 for any hover
+        // below about 35cm; the controller now owns that judgement so this and
+        // the idle banner cannot drift apart.
+        if (!controller.airborne.value) return
 
         warnJob = viewModelScope.launch {
             delay(BACKGROUND_WARNING_DELAY_MS)

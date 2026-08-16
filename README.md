@@ -449,24 +449,37 @@ An aircraft in the air, reported as sitting on the ground.
 
 ### The airborne gate
 
-The idle banner and the background notification both suppress themselves on `h <= 0`. That gate is
-**confirmed broken**: any hover below roughly 35 cm reports `h` 0, so both warnings go silent on a
-flying drone. It is also biased the wrong way — a false "airborne" costs a needless warning, a false
-"on the ground" costs a missed one about an aircraft that is about to auto-land itself.
+Two things need to know whether the drone is flying: the idle banner, and the notification posted
+when the app is backgrounded. Both used to ask `h > 0`, each with its own copy of the test, and both
+were wrong for the same reason — `h` reads about 35 cm low, so it reports 0 for any hover below that.
+A real flight held 30 cm with the motors running for sixteen seconds while both warnings stayed
+silent.
 
-Not implemented, deliberately — it changes flight-safety logic and should land with its own tests
-and its own UAT pass rather than be slipped in mid-run. The intended shape:
+The judgement now lives in one place, `TelloController.judgeAirborne`, and reads:
 
-- Airborne if `h > 0` **or** `tof` is above a named, empirical threshold. A dark or reflective floor
-  makes `tof` fail *upward*, to around 6553, so a bad surface produces a false "airborne" — the safe
-  direction. Flying over a table collapses `tof` while `h` holds, which is what the `or` is for.
-  Never test for an exact floor value: 10 is what this airframe reports, not a documented constant,
-  and the documented valid minimum is 30.
-- Possibly also "motors running", inferred from `time` increasing between packets. It is the only
-  field that tracks the motors rather than an altitude estimate, so it is immune to barometric drift
-  and to whatever the floor is made of. Needs confirming that it freezes when the drone sits with
-  motors stopped, which is a two-line check on data already being logged.
-- Keep the existing "unknown height means warn" behaviour either way.
+```
+airborne  =  motors turning  OR  h > 0  OR  nothing known
+```
+
+- **Motors turning** — the `time` field advanced within the last three seconds. DJI documents it as
+  "the amount of time the motor has been used", so a counter that is moving means props that are
+  spinning. It is the only signal that does not pass through an altitude estimate, and it is the one
+  that catches the low hover. The first reading of a session sets a baseline and nothing more: the
+  counter never resets, so connecting to a drone that flew earlier finds a large number sitting
+  still, and still means still.
+- **`h > 0`** — a second, independent opinion for anything the barometer can see, kept as a backstop
+  because only one flight has been examined in this detail.
+- **Nothing known** — no telemetry yet, or a packet without `h`. Warn.
+
+The asymmetry is the whole design: a false "airborne" costs a warning nobody needed, a false "on the
+ground" costs silence about an aircraft that is about to put itself down. Every term errs the
+harmless way, including the three seconds of "airborne" that linger after touchdown.
+
+**`tof` is deliberately not used**, though an earlier plan here said it would be. The data killed it:
+this airframe reads 10 sitting on the floor and will not hover below about 27, so a threshold has to
+be placed in a 17 cm gap — and the 10 is not a documented constant, while the SDK says readings under
+30 are not valid distances at all. That is a number picked between two numbers worth no confidence.
+Motor state answers the same question without one.
 
 ### SDK version: this targets 1.3, not 2.0
 
