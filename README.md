@@ -55,8 +55,8 @@ telemetry stream to a CSV; a back-gesture guard that offers to land first; and W
 (see [Talking to a network with no internet](#talking-to-a-network-with-no-internet)).
 
 **Acceptance tested against a real drone.** [docs/UAT.md](docs/UAT.md) — Part A 20/20, Part B 15/15,
-run against a pinned build so that fixes could not invalidate results mid-run. Four defects were
-found and fixed before that run, and nothing regressed during it.
+Part C 2/2, with Part B run against a pinned build so that fixes could not invalidate results
+mid-run. Four defects were found and fixed before that run, and nothing regressed during it.
 
 **Flown.** First real flight on 13 August 2026, from a Pixel 7 running Android 17 — the device the
 official app cannot launch on. Connect and handshake, takeoff, land, the discrete moves, yaw, and
