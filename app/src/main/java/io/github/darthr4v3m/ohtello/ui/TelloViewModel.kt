@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.darthr4v3m.ohtello.BuildConfig
 import io.github.darthr4v3m.ohtello.tello.CommandLogEntry
 import io.github.darthr4v3m.ohtello.tello.ConnectionState
+import io.github.darthr4v3m.ohtello.tello.SessionArchive
 import io.github.darthr4v3m.ohtello.tello.SessionLogStore
 import io.github.darthr4v3m.ohtello.tello.TelemetryLogStore
 import io.github.darthr4v3m.ohtello.tello.TelloController
@@ -15,6 +16,7 @@ import io.github.darthr4v3m.ohtello.tello.protocol.MoveDirection
 import io.github.darthr4v3m.ohtello.tello.protocol.TelloCommands
 import io.github.darthr4v3m.ohtello.tello.protocol.TelloState
 import io.github.darthr4v3m.ohtello.tello.protocol.TurnDirection
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +52,49 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The stored sessions as one blob, for the console's share button. */
     fun logsForSharing(): String = sessionLog.shareableText()
+
+    private val _exportMessage = MutableStateFlow<String?>(null)
+
+    /** Where the last export landed, or why it did not. Cleared once shown. */
+    val exportMessage: StateFlow<String?> = _exportMessage.asStateFlow()
+
+    /**
+     * Packs this run's console log and telemetry recording into a zip in the
+     * phone's Downloads folder.
+     *
+     * The newest of each, which is this run — the pair that describes the flight
+     * that just happened. Off the main thread: it reads two files, compresses
+     * them and writes through a content resolver, none of which belongs on the
+     * thread drawing the flight controls.
+     */
+    fun exportLatestSession() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val files = listOfNotNull(
+                sessionLog.sessions().lastOrNull(),
+                telemetryLog.sessions().lastOrNull(),
+            )
+            if (files.isEmpty()) {
+                _exportMessage.value = "Nothing recorded yet."
+                return@launch
+            }
+
+            _exportMessage.value = runCatching {
+                var stored = emptyList<String>()
+                val name = SessionArchive.fileName(BuildConfig.VERSION_NAME, System.currentTimeMillis())
+                val where = writeToDownloads(getApplication(), name) { out ->
+                    stored = SessionArchive.writeTo(out, files)
+                }
+                // Say how many, because a recording only exists if the drone was
+                // connected — exporting after a session that never flew gives
+                // one file, and that should not look like a failure.
+                "Saved ${stored.size} file(s) to $where"
+            }.getOrElse { "Could not save: ${it.message ?: it}" }
+        }
+    }
+
+    fun clearExportMessage() {
+        _exportMessage.value = null
+    }
 
     val connection: StateFlow<ConnectionState> = controller.connection
     val state: StateFlow<TelloState?> = controller.state

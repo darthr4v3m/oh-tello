@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -114,7 +115,18 @@ fun TelloScreen(
     }
 
     var quitPrompt by rememberSaveable { mutableStateOf(false) }
-    val activity = LocalContext.current.findActivity()
+    val context = LocalContext.current
+    val activity = context.findActivity()
+
+    // A toast rather than a console line: the export is something the pilot
+    // asked for and is waiting on, and it needs to say where the file went.
+    val exportMessage by viewModel.exportMessage.collectAsStateWithLifecycle()
+    LaunchedEffect(exportMessage) {
+        exportMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearExportMessage()
+        }
+    }
 
     // Back would otherwise finish the activity, close the sockets and walk away
     // from an airborne drone without a word.
@@ -179,6 +191,7 @@ fun TelloScreen(
                 onShowKeepAlivesChange = viewModel::setShowKeepAlives,
                 onClear = viewModel::clearLog,
                 onShare = viewModel::logsForSharing,
+                onExport = viewModel::exportLatestSession,
             )
         }
 
@@ -627,6 +640,7 @@ private fun ConsoleCard(
     onShowKeepAlivesChange: (Boolean) -> Unit,
     onClear: () -> Unit,
     onShare: () -> String,
+    onExport: () -> Unit,
 ) {
     val context = LocalContext.current
     val visible = remember(entries, showKeepAlives) {
@@ -720,6 +734,17 @@ private fun ConsoleCard(
                     }
                 }
             }
+        }
+
+        // Under the console rather than beside Share, because it does a
+        // different job: Share sends the console as text, this saves the flight
+        // — console and telemetry recording together — as a file you can reach
+        // from the Files app or a cable.
+        TextButton(
+            onClick = onExport,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Save last session to Downloads")
         }
     }
 }
