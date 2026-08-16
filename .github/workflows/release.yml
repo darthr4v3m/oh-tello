@@ -27,6 +27,11 @@ on:
         description: 'Version to release, e.g. v0.1.0. Must not already exist.'
         required: true
         type: string
+      dry_run:
+        description: 'Check and build, but create nothing. Answers "is main releasable?" without spending a version number.'
+        required: false
+        default: false
+        type: boolean
 
 # Never cancel a release in flight. Unlike CI, a half-finished run here can
 # leave a tag with no asset attached to it.
@@ -52,13 +57,17 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         INPUT_TAG: ${{ inputs.tag }}
+        DRY_RUN: ${{ inputs.dry_run }}
       run: |
         set -euo pipefail
 
         if [ "$GITHUB_EVENT_NAME" = "push" ]; then
           # The tag exists already; it is what triggered this run.
-          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-          echo "create=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$GITHUB_REF_NAME"
+            echo "create=false"
+            echo "publish=true"
+          } >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -83,8 +92,23 @@ jobs:
           exit 1
         fi
 
-        echo "tag=$tag" >> "$GITHUB_OUTPUT"
-        echo "create=true" >> "$GITHUB_OUTPUT"
+        # A dry run does every check and the whole build, then stops. It proves
+        # main is releasable without spending a version number on finding out.
+        if [ "$DRY_RUN" = "true" ]; then
+          echo "::notice::dry run — $tag passes every check; nothing will be created"
+          {
+            echo "tag=$tag"
+            echo "create=false"
+            echo "publish=false"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        {
+          echo "tag=$tag"
+          echo "create=true"
+          echo "publish=true"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Build the APK
       id: build
@@ -107,6 +131,7 @@ jobs:
 
     - name: Publish the release
       id: publish
+      if: steps.check.outputs.publish == 'true'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         REPO: ${{ github.repository }}
@@ -140,6 +165,35 @@ jobs:
         echo "### 📦 [$APK](https://github.com/$REPO/releases/download/$TAG/$APK)" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
         echo "Released as **$TAG** from \`${GITHUB_SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
+
+    # The point of a dry run is a clear answer, so say so rather than leaving a
+    # green tick to be interpreted.
+    - name: Report the dry run
+      if: steps.check.outputs.publish != 'true'
+      env:
+        TAG: ${{ steps.check.outputs.tag }}
+        APK: ${{ steps.build.outputs.apk }}
+        SHARED_KEY: ${{ steps.build.outputs.signing_shared }}
+      run: |
+        set -euo pipefail
+        {
+          echo "### Dry run: \`$TAG\` is releasable"
+          echo ""
+          echo "Every check passed and the build succeeded. Nothing was created."
+          echo ""
+          echo "| | |"
+          echo "| --- | --- |"
+          echo "| would tag | \`$TAG\` at \`${GITHUB_SHA:0:7}\` |"
+          echo "| would publish | \`$APK\` |"
+          echo "| shared signing key | $SHARED_KEY |"
+          echo ""
+          echo "Run again with **dry_run** unticked to release it."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$SHARED_KEY" != "true" ]; then
+          echo "::error::DEBUG_KEYSTORE_BASE64 is not set — a real run would refuse to publish"
+          exit 1
+        fi
 
     - name: Upload reports
       if: failure()
