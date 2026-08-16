@@ -53,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -655,7 +657,17 @@ private fun ConsoleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(4.dp))
-                Switch(checked = showKeepAlives, onCheckedChange = onShowKeepAlivesChange)
+                // The "keepalives" label beside this is a sibling, not part of
+                // the switch, so a screen reader would otherwise announce an
+                // unnamed control. Say what it does rather than what it is:
+                // hiding them changes the view, never whether they are sent.
+                Switch(
+                    checked = showKeepAlives,
+                    onCheckedChange = onShowKeepAlivesChange,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Show keepalive commands in the console"
+                    },
+                )
                 TextButton(
                     onClick = {
                         // Every stored session, not just what is on screen: the

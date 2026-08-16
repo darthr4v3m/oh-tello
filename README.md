@@ -267,19 +267,32 @@ Permissions used, in full: `INTERNET` (required for any socket, even a purely lo
 [Safety notes](#safety-notes). No location permission — the app never scans for networks, it only looks at
 the one you already joined.
 
+**A trap waiting for whoever raises `targetSdk` to 37.** Android 17 puts traffic to local network
+addresses behind a new runtime permission, `ACCESS_LOCAL_NETWORK`, covering all such traffic rather
+than only discovery. `192.168.10.1` is a local address. Apps targeting API 36 and below are exempt,
+which is the only reason this works today at `targetSdk` 35 — but the moment that number changes,
+every packet to the drone is blocked, and the symptom is indistinguishable from the socket-binding
+failure described above. Declaring the permission is the easy half; it also needs a runtime request
+and a sensible refusal path. There is a note in the manifest next to `INTERNET` saying the same
+thing, because that is where someone will be looking.
+
 ## Testing
 
-`./gradlew test` runs 32 tests, none of which need a device:
+`./gradlew test` runs 63 tests, none of which need a device:
 
 - `TelloCommandsTest`, `TelloResponseTest`, `TelloStateTest` — command building and clamping,
   response parsing (`ok`, `OK`, values, `error Not joystick`, `out of range`, CRLF and NUL
-  padding), and telemetry parsing against a real captured packet, including truncated and
-  unfamiliar-key packets.
+  padding), rejecting the drone's binary packets as replies, and telemetry parsing against a real
+  captured packet, including truncated and unfamiliar-key packets.
 - `TelloControllerTest` — drives the real controller against `FakeDrone`, a loopback UDP stand-in,
   over real sockets and real time: handshake, a silent drone failing instead of hanging, strict
   serialisation of overlapping commands, the late-reply drain, telemetry freshness going stale
-  after 2s of silence, `rc` being sent without waiting for a reply that never comes, and
+  after 2s of silence, `rc` being sent without waiting for a reply that never comes, a link that
+  goes quiet tearing itself down, the idle warning staying silent for a grounded drone, and
   disconnect/reconnect.
+- `SessionLogStoreTest`, `TelemetryLogStoreTest` — rotation, the size cap, decimation, concurrent
+  writes, sharing newest-session-first, and the two stores sharing a directory without pruning
+  each other's files.
 
 What that does **not** cover: the Compose UI, the Wi-Fi binder, and anything about how a real
 drone behaves. First real-drone smoke test, props off:

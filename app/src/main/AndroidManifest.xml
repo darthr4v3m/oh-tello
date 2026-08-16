@@ -4,6 +4,23 @@
     <!-- Required for any socket use, including purely local UDP to the drone. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
+        BEFORE RAISING targetSdk TO 37: this app must also declare and request
+        android.permission.ACCESS_LOCAL_NETWORK, or every packet to the drone
+        will be silently blocked.
+
+        Android 17 gates traffic to local network addresses behind a runtime
+        permission, and 192.168.10.1 is one. It applies to all such traffic, not
+        just discovery. Apps targeting API 36 and below are exempt, which is the
+        only reason this works today.
+
+        It is deliberately not declared yet: it does nothing before targetSdk 37,
+        and it needs a runtime request and a refusal path, which is real work
+        rather than a manifest line. The failure it causes looks exactly like a
+        socket-binding fault, so whoever bumps targetSdk will otherwise lose an
+        afternoon inside WifiSocketBinder looking for a bug that is not there.
+    -->
+
+    <!--
         Needed to find the Wi-Fi Network object and bind our sockets to it. The
         Tello's access point has no internet, so Android keeps mobile data as the
         default network and unbound UDP would leave via cellular and never reach
