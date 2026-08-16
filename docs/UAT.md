@@ -245,7 +245,8 @@ failing to fall to 0 on landing. See the README, *Height telemetry*, for why it 
 **Expect:** the drone moves in the direction the label says, roughly 30 cm each time. **Directions
 are from the drone's nose, not yours** — if forward comes toward you, the drone is facing you, not
 a bug.
-- [ ] Pass — notes: `______________________`
+- [x] Pass — notes: `fwd/back/left/right by eye; up 100 moved tof 49->148, down 100 148->51,
+  down 30 78->52 — direction and distance confirmed from the recorder`
 
 ### B4 — Step size
 **Do:** select 100 cm, press forward. Then 20 cm, press back twice.
@@ -273,7 +274,9 @@ jumping the queue.
 **Do:** hover and touch nothing for ~15 seconds.
 **Expect:** the banner appears; the drone keeps hovering (the keepalive is holding it up). Press a
 direction; banner clears.
-- [ ] Pass — notes: `______________________`
+**Half done:** the banner appeared in the air on 16 Aug and the drone kept hovering while it
+showed. Clearing it with a direction press has still only been seen on the ground (A11).
+- [ ] Pass — notes: `banner appears: yes. cleared by a direction press in the air: not yet`
 
 ### B9 — The one that matters: background while flying
 **Do:** hover at about 1 m. Press **Home** (or lock the phone). **Watch the drone, not the phone.**
