@@ -429,24 +429,30 @@ is why every reading is a multiple of 10 and why `height?` answers `4dm` rather 
 centimetres. It cannot be more precise than 10 cm, it is relative to a pressure datum captured at
 takeoff, it drifts over a flight, and it can legitimately go negative.
 
-**Why it under-reads is unresolved, and it matters.** One airborne sample cannot tell a scale error
-from a fixed offset: `h = true / 2` and `h = true - 38 cm` both predict 40 at a true 80. They
-disagree exactly where it counts. At a 45 cm hover the scale model puts `h` at 20 and the idle
-banner still fires; the offset model puts it at 0 and the warning goes silent on an aircraft that is
-airborne. The offset is the more plausible of the two — no source reports a 2x scale bug on hardware
-this heavily reverse-engineered, whereas the takeoff datum is known to be captured badly, and
-propwash lowering static pressure at spin-up would bias it in exactly this direction, by a constant
-amount, and only while the motors are turning.
+**It is a fixed offset, not a scale — settled.** One airborne sample could not tell `h = true / 2`
+from `h = true - 38 cm`, since both predict 40 at a true 80. A flight recording on 16 August
+answered it with 108 samples across the whole altitude range:
 
-**UAT B14 settles it in one flight:** hover, log `h`/`tof`/`baro`, `up 100`, hover, log again. If
-`h/tof` stays near 0.5 it is a scale. If `tof - h` stays near 38 it is an offset.
+| | mean | spread |
+| --- | --- | --- |
+| `tof - h` | 35.3 cm | **15%** |
+| `h / tof` | 0.32 | 92% |
+
+The difference holds steady from 10 cm to 150 cm while the ratio collapses from 0.75 to 0. **`h`
+reads about 35 cm less than the truth, at every height.** Which is the dangerous answer, and it is
+no longer a prediction:
+
+> In that same recording the drone hovered at `tof` 27-37 for **sixteen seconds** with the motors
+> running — `time` advanced from 31 to 47 — and `h` read **0** for all 32 samples of it.
+
+An aircraft in the air, reported as sitting on the ground.
 
 ### The airborne gate
 
-The idle banner and the background notification both suppress themselves on `h <= 0`, which is the
-weakest available signal for the reason above, and biased the wrong way: a false "airborne" costs a
-needless warning, a false "on the ground" costs a missed one about an aircraft that is about to
-auto-land itself.
+The idle banner and the background notification both suppress themselves on `h <= 0`. That gate is
+**confirmed broken**: any hover below roughly 35 cm reports `h` 0, so both warnings go silent on a
+flying drone. It is also biased the wrong way — a false "airborne" costs a needless warning, a false
+"on the ground" costs a missed one about an aircraft that is about to auto-land itself.
 
 Not implemented, deliberately — it changes flight-safety logic and should land with its own tests
 and its own UAT pass rather than be slipped in mid-run. The intended shape:

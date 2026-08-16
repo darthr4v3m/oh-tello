@@ -419,13 +419,14 @@ class TelloController(
             // silent only when telemetry actually says it is down, since an
             // unknown height is better warned about than assumed safe.
             //
-            // `h` reads low: 40 during a hover where `tof` read 76 and the
-            // pilot measured ~80. Whether that is a scale error or a fixed
-            // offset is unresolved, and it decides how thin this gate is. A
-            // scale puts `h` at 20 during a 45cm hover and the gate holds; an
-            // offset puts it at 0 and the warning never fires. The offset is
-            // the more plausible of the two. See the README before relying on
-            // this, and note `h` is quantised to 10cm regardless.
+            // KNOWN BROKEN, deliberately left until it can be tested properly.
+            // `h` reads about 35cm low at every height — a fixed offset, not a
+            // scale, settled by 108 samples from a real descent. So `h` is 0
+            // for any hover below ~35cm: one recording has the drone holding
+            // 30cm with the motors running while this reads it as parked, for
+            // sixteen seconds, with no warning shown. The fix is in the README
+            // under "The airborne gate"; it needs its own tests and its own
+            // pass through the UAT.
             val onTheGround = _state.value?.heightCm?.let { it <= 0 } == true
 
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&

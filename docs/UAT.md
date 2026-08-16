@@ -14,14 +14,14 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 
 ## Still to run
 
-**Part A is complete — 20 of 20.** Part B is **paused after B2**: thirteen checks left, every one of
-them needing the motors spinning and about 3 × 3 m of clear space. **Resume at B3.**
+**Part A is complete — 20 of 20.** Part B: **B1, B2, B3 and B14 pass**, B8 is half done, ten left.
+**Resume at B4.**
 
-B2 turned up something worth carrying forward: `h` under-reads by about 38 cm, and the idle banner
-and the background notification both key off it. Whether that is a scale error or a fixed offset is
-unresolved, and the two disagree exactly where safety depends on it — **B14 settles it in one
-flight** and is worth doing early rather than last. Background in the README under *Height
-telemetry*.
+**The one finding to carry forward:** `h` reads about 35 cm low at every height — settled by the
+recorder, see B14. That is a fixed offset, so `h` reads 0 for any hover below ~35 cm, and a real
+flight showed the drone hovering at 30 cm with motors running while `h` said 0 for sixteen
+seconds. The idle banner and the background notification both key off `h <= 0`, so **both go
+silent on a low hover**. Not fixed; the intended change is in the README under *The airborne gate*.
 
 The two that carry the most weight, so they are not left to last by accident:
 
@@ -361,7 +361,11 @@ two hovers are just rows — no need to read numbers off a screen while holding 
 fires; the offset model puts it at 0 and the warning goes silent on a drone that is airborne. The
 offset is the more likely of the two, and it is the dangerous one. Whichever it is, write both sets
 of numbers into the notes — they are the evidence, not the conclusion.
-- [ ] Pass — notes: `______________________`
+**Already answered, on 16 Aug.** A descent captured by the flight recorder gave 108 samples from
+0 to 150 cm: `tof - h` held at 35.3 cm (15% spread) while `h / tof` ranged 0.75 down to 0 (92%
+spread). It is an **offset** — `h` reads about 35 cm low at every height. Re-run this only if you
+want independent corroboration.
+- [x] Pass — notes: `offset, ~35cm. tof-h 35.3 +/- 5.3 over 108 samples; h/tof 0.32 +/- 0.29`
 ### B15 — Emergency cut (optional, do it last)
 **Only over grass or a mat, at 30–50 cm, with guards on. The drone will drop.**
 **Do:** hover low, tap Emergency twice.
