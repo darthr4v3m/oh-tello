@@ -1,3 +1,5 @@
+<img src="docs/img/oh-tello-icon.svg" alt="" width="96">
+
 # Oh-Tello
 
 Minimal Android controller for the DJI/Ryze Tello drone, talking directly to the SDK 2.0 UDP
