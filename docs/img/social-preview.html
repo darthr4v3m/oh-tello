@@ -1,16 +1,33 @@
+<!DOCTYPE html>
 <!--
     Source for social-preview.png, the repository's social media preview card.
 
     That PNG is not referenced from anywhere in the repo — GitHub has no API for
     it, so it has to be uploaded by hand under Settings -> General -> Social
     preview. This file is kept alongside it so the card can be edited rather than
-    rebuilt from scratch.
+    rebuilt from scratch. Editing it does NOT change what is live: the upload is
+    a separate manual step, and it has to be repeated after every edit.
 
-    Regenerate (any headless Chromium; the 1280x640 window size is the output size,
-    and GitHub crops toward the centre, so keep content inside the 80px padding):
+    Regenerate — run from this directory, since both paths below are relative to
+    it. Pointed at a missing file Chromium screenshots its own error page and
+    still exits 0, so check the output rather than the exit code:
 
-        chromium --headless --hide-scrollbars --force-device-scale-factor=1 \
-            --screenshot=social-preview.png --window-size=1280,640 social-preview.html
+        cd docs/img && chromium --headless --hide-scrollbars \
+            --force-device-scale-factor=1 --screenshot=social-preview.png \
+            --window-size=1280,640 social-preview.html
+
+    The 1280x640 window size is the output size, and GitHub crops toward the
+    centre, so keep content inside the 80px padding.
+
+    This reproduces the committed PNG byte-for-byte ONLY where Liberation Sans
+    and DejaVu Sans Mono are installed (both ship with fontconfig on most Linux
+    distributions; macOS and Windows have neither). The layout is metric-
+    dependent: the tagline's two lines are hand-broken with <br> and sized to
+    fit 900px in Liberation Sans, but the same string measures ~1143px in
+    DejaVu Sans, the next font in the stack — so on a host without Liberation
+    the tagline silently wraps to three lines and the card no longer matches.
+    Check the render, and if the fonts are unavailable, adjust the breaks by eye
+    rather than assuming the command is deterministic everywhere.
 
     The mark is inlined from oh-tello-icon.svg, on a slightly lifted tile
     (#161B21) so it reads as a tile against the flat #101418 ground.
