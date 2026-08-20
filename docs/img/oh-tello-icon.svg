@@ -1,0 +1,44 @@
+<!--
+    Web-renderable copy of the app launcher icon.
+
+    Hand-translated from app/src/main/res/drawable/ic_launcher_{background,foreground}.xml.
+    Android vector path data is a subset of SVG path data, so every `d` below is its
+    `android:pathData` verbatim — but the attributes around it are not a straight copy.
+    Four things differ, and the third is load-bearing:
+
+      1. Colours are 6-digit #RRGGBB here, 8-digit #AARRGGBB (opaque) there.
+      2. Attribute names: strokeColor/strokeWidth/strokeLineCap -> stroke/stroke-width/
+         stroke-linecap, fillColor -> fill.
+      3. `fill="none"` is added to every stroke-only path. Android treats an absent
+         fillColor as no fill; SVG defaults `fill` to BLACK. Drop it and the arms and
+         rotors fill in as solid black blobs.
+      4. The background is a <rect rx="24"> rather than a full-bleed path, so the icon
+         reads as the rounded tile a launcher mask produces.
+
+    Keep this in sync by hand if the drawables change — nothing regenerates it, and
+    copying new pathData across without re-applying 2 and 3 will render wrong.
+
+    Note this shows the whole 108x108 viewport. On device an adaptive icon crops to
+    the central 72x72, so the mark appears larger there than it does here.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108"
+     role="img" aria-label="Oh-Tello icon: a stylised quadcopter, four rotors on an X frame">
+
+    <!-- Background -->
+    <rect x="0" y="0" width="108" height="108" rx="24" fill="#101418" />
+
+    <!-- Frame arms -->
+    <path d="M36,36 L72,72 M72,36 L36,72"
+          fill="none" stroke="#6FD3FF" stroke-width="5" stroke-linecap="round" />
+
+    <!-- Body -->
+    <path d="M54,45 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" fill="#6FD3FF" />
+
+    <!-- Rotors -->
+    <g fill="none" stroke="#B8E8FF" stroke-width="4">
+        <path d="M36,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+        <path d="M72,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+        <path d="M36,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+        <path d="M72,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    </g>
+</svg>

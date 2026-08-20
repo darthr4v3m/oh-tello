@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+    Source for social-preview.png, the repository's social media preview card.
+
+    That PNG is not referenced from anywhere in the repo — GitHub has no API for
+    it, so it has to be uploaded by hand under Settings -> General -> Social
+    preview. This file is kept alongside it so the card can be edited rather than
+    rebuilt from scratch. Editing it does NOT change what is live: the upload is
+    a separate manual step, and it has to be repeated after every edit.
+
+    Regenerate — run from this directory, since both paths below are relative to
+    it. Pointed at a missing file Chromium screenshots its own error page and
+    still exits 0, so check the output rather than the exit code:
+
+        cd docs/img && chromium --headless --hide-scrollbars \
+            --force-device-scale-factor=1 --screenshot=social-preview.png \
+            --window-size=1280,640 social-preview.html
+
+    The 1280x640 window size is the output size, and GitHub crops toward the
+    centre, so keep content inside the 80px padding.
+
+    This reproduces the committed PNG byte-for-byte ONLY where Liberation Sans
+    and DejaVu Sans Mono are installed (both ship with fontconfig on most Linux
+    distributions; macOS and Windows have neither). The layout is metric-
+    dependent: the tagline's two lines are hand-broken with <br> and sized to
+    fit 900px in Liberation Sans, but the same string measures ~1143px in
+    DejaVu Sans, the next font in the stack — so on a host without Liberation
+    the tagline silently wraps to three lines and the card no longer matches.
+    Check the render, and if the fonts are unavailable, adjust the breaks by eye
+    rather than assuming the command is deterministic everywhere.
+
+    The mark is inlined from oh-tello-icon.svg, on a slightly lifted tile
+    (#161B21) so it reads as a tile against the flat #101418 ground.
+-->
+<html>
+<head><meta charset="utf-8"><style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    background: #101418;
+    font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  /* soft cyan glow behind the mark, for depth against the flat dark ground */
+  .glow {
+    position: absolute; width: 900px; height: 900px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(111,211,255,0.13) 0%, rgba(111,211,255,0) 62%);
+    top: 50%; left: 50%; transform: translate(-50%, -58%);
+  }
+  /* 80px inset keeps everything clear of GitHub's 40pt crop guides */
+  .card {
+    position: relative; padding: 80px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+  }
+  .lockup { display: flex; align-items: center; gap: 40px; }
+  .lockup svg { width: 168px; height: 168px; display: block; }
+  h1 {
+    font-size: 108px; font-weight: 700; letter-spacing: -3px;
+    color: #F2F7FA; line-height: 1;
+  }
+  .tagline {
+    margin-top: 40px; font-size: 34px; line-height: 1.35;
+    color: #9AA8B4; max-width: 900px;
+  }
+  .meta {
+    margin-top: 36px; padding-top: 30px;
+    border-top: 2px solid rgba(111,211,255,0.22);
+    font-family: "DejaVu Sans Mono", monospace;
+    font-size: 24px; letter-spacing: 0.5px; color: #6FD3FF;
+  }
+  .meta span { color: #4A5A66; margin: 0 14px; }
+</style></head>
+<body>
+  <div class="glow"></div>
+  <div class="card">
+    <div class="lockup">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+        <rect x="0" y="0" width="108" height="108" rx="24" fill="#161B21"/>
+        <path d="M36,36 L72,72 M72,36 L36,72" fill="none" stroke="#6FD3FF" stroke-width="5" stroke-linecap="round"/>
+        <path d="M54,45 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" fill="#6FD3FF"/>
+        <g fill="none" stroke="#B8E8FF" stroke-width="4">
+          <path d="M36,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"/>
+          <path d="M72,36 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"/>
+          <path d="M36,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"/>
+          <path d="M72,72 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0"/>
+        </g>
+      </svg>
+      <h1>Oh-Tello</h1>
+    </div>
+    <div class="tagline">Minimal Android controller for the DJI/Ryze Tello drone,<br>talking straight to the SDK 2.0 UDP protocol.</div>
+    <div class="meta">Kotlin<span>&middot;</span>Compose<span>&middot;</span>no third-party SDK<span>&middot;</span>no native code</div>
+  </div>
+</body>
+</html>
