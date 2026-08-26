@@ -5,6 +5,7 @@ import io.github.darthr4v3m.ohtello.tello.protocol.TelloResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -494,6 +495,139 @@ class TelloControllerTest {
         awaitIdle(true)
     }
 
+    // --------------------------------------- leaving the app hands the drone over
+
+    @Test
+    fun `returning to the app does not resume the keepalive during a failsafe landing`() =
+        runBlocking {
+            // The bug this exists for: coming back used to speak to the drone
+            // within half a second, which it reads as "the pilot is back", so it
+            // gave up landing and sat on the floor with its motors running.
+            assertTrue(controller.connect())
+            val telemetry = launch { hover() }
+            awaitAirborne(true)
+
+            controller.setOperatorPresent(false)
+            assertTrue("leaving an airborne drone did not hand it over", controller.failsafeLanding.value)
+
+            val spokenWhenLeft = keepAlivesSent()
+            controller.setOperatorPresent(true)
+            delay(KEEPALIVE_SILENCE_MS)
+
+            assertEquals(
+                "coming back to the app spoke to a drone that was landing itself",
+                spokenWhenLeft,
+                keepAlivesSent(),
+            )
+            assertTrue("the handover let go on its own", controller.failsafeLanding.value)
+
+            // The one thing that does interrupt it.
+            controller.resumeControl()
+            withTimeout(KEEPALIVE_SILENCE_MS) {
+                while (keepAlivesSent() == spokenWhenLeft) delay(50)
+            }
+            assertFalse(controller.failsafeLanding.value)
+
+            telemetry.cancel()
+        }
+
+    @Test
+    fun `pilot commands are refused while the drone is landing itself`() = runBlocking {
+        // Locking the keepalive alone would only move the bug: the drone cannot
+        // tell one command from another, so a stray tap on the D-pad cancels the
+        // landing just as silently.
+        assertTrue(controller.connect())
+        val telemetry = launch { hover() }
+        awaitAirborne(true)
+        controller.setOperatorPresent(false)
+
+        val response = controller.move(MoveDirection.FORWARD, 30)
+
+        assertTrue("a move got through", response is TelloResponse.Unreachable)
+        assertFalse("the datagram reached the drone", drone.received.any { it.startsWith("forward") })
+
+        telemetry.cancel()
+    }
+
+    @Test
+    fun `land still reaches a drone that is landing itself`() = runBlocking {
+        // Telling it to come down is never the wrong thing to allow while it is
+        // coming down, so `land` keeps its own path out.
+        assertTrue(controller.connect())
+        val telemetry = launch { hover() }
+        awaitAirborne(true)
+        controller.setOperatorPresent(false)
+
+        controller.land()
+
+        assertTrue("Land was locked out", drone.received.any { it == "land" })
+
+        telemetry.cancel()
+    }
+
+    @Test
+    fun `backgrounding a parked drone does not lock the controls`() = runBlocking {
+        // Ordinary app switching between flights has to stay free of charge.
+        assertTrue(controller.connect())
+        repeat(4) {
+            drone.pushState("h:0;bat:72;tof:10;time:31;")
+            delay(150)
+        }
+        awaitAirborne(false)
+
+        controller.setOperatorPresent(false)
+        assertFalse("a drone on the floor was handed over", controller.failsafeLanding.value)
+
+        val spokenWhenLeft = keepAlivesSent()
+        controller.setOperatorPresent(true)
+
+        withTimeout(KEEPALIVE_SILENCE_MS) {
+            while (keepAlivesSent() == spokenWhenLeft) delay(50)
+        }
+    }
+
+    @Test
+    fun `the lock lifts by itself once the drone is down`() = runBlocking {
+        assertTrue(controller.connect())
+        var motorSeconds = 40
+        val telemetry = launch {
+            while (isActive) {
+                drone.pushState("h:0;bat:45;tof:30;time:${motorSeconds++};")
+                delay(200)
+            }
+        }
+        awaitAirborne(true)
+        controller.setOperatorPresent(false)
+        assertTrue(controller.failsafeLanding.value)
+        telemetry.cancel()
+
+        // Touchdown: the counter freezes where it stopped.
+        val frozen = launch {
+            while (isActive) {
+                drone.pushState("h:0;bat:45;tof:10;time:$motorSeconds;")
+                delay(200)
+            }
+        }
+        awaitAirborne(false)
+
+        assertFalse(
+            "the pilot still had to ask for controls back after it landed",
+            controller.failsafeLanding.value,
+        )
+        frozen.cancel()
+    }
+
+    /** A drone holding a low hover: `h` reads 0, the motor counter advances. */
+    private suspend fun hover() {
+        var motorSeconds = 20
+        while (currentCoroutineContext().isActive) {
+            drone.pushState("h:0;bat:60;tof:30;time:${motorSeconds++};")
+            delay(200)
+        }
+    }
+
+    private fun keepAlivesSent(): Int = drone.received.count { it == "command" }
+
     private suspend fun awaitIdle(expected: Boolean) {
         withTimeout(IDLE_WARNING_MS + 4_000) {
             while (controller.pilotIdle.value != expected) delay(50)
@@ -512,5 +646,8 @@ class TelloControllerTest {
 
         /** A command the fake drone is deliberately slow to answer. */
         const val SLOW_REPLY_MS = 1_500L
+
+        /** Long enough that a keepalive was due, and then some. */
+        const val KEEPALIVE_SILENCE_MS = TelloController.KEEPALIVE_INTERVAL_MS + 2_000L
     }
 }

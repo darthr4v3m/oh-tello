@@ -213,6 +213,14 @@ Keep the prop guards on for every development test flight.
   phone, switch apps, or close it, and the keepalive stops: the drone lands itself shortly after,
   wherever it happens to be. That is deliberate — an unattended drone should come down — but it
   also means glancing at another app mid-flight will land it.
+- **Leaving the app while the drone is flying hands it over, and coming back does not take it
+  back.** Returning shows a banner and leaves the controls locked; the drone carries on landing
+  until you tap **Take back control**. Land and Emergency are never locked. This is not caution
+  for its own sake: the drone treats *any* command as "the pilot is back" and abandons its
+  landing for it, so returning used to cancel a touchdown already in progress and leave the
+  aircraft with its motors running at ground level, exactly where a hand reaches in for it. The
+  lock lifts by itself once telemetry says the drone is down. Backgrounding with it parked on
+  the floor changes nothing — there is no landing to interrupt.
 - **How long is "a while" is not settled.** The SDK documents 15 seconds from the last command. A
   session log from 14 August 2026 shows the drone answering normally after **23.2 seconds** of
   total silence, and the pilot watching it reported a landing somewhere past 30. Note that a

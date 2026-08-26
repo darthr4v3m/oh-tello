@@ -89,9 +89,13 @@ fun TelloScreen(
     val showKeepAlives by viewModel.showKeepAlives.collectAsStateWithLifecycle()
     val emergencyArmed by viewModel.emergencyArmed.collectAsStateWithLifecycle()
     val pilotIdle by viewModel.pilotIdle.collectAsStateWithLifecycle()
+    val failsafeLanding by viewModel.failsafeLanding.collectAsStateWithLifecycle()
 
     val connected = connection is ConnectionState.Connected
-    val canFly = connected && !busy
+    // Every command tells the drone its pilot is back and cancels the landing,
+    // `battery?` as surely as the D-pad, so one flag locks all of them. Land and
+    // Emergency are gated on `connected` alone and stay live throughout.
+    val canFly = connected && !busy && !failsafeLanding
 
     // The keepalive is what stops the drone using its own auto-land, so it only
     // runs while someone is actually looking at the app. Pocket the phone and
@@ -171,7 +175,7 @@ fun TelloScreen(
                 state = state,
                 telemetryFresh = telemetryFresh,
                 connected = connected,
-                busy = busy,
+                canQuery = canFly,
                 onRefreshBattery = viewModel::queryBattery,
             )
 
@@ -196,7 +200,14 @@ fun TelloScreen(
             )
         }
 
-        if (pilotIdle) IdleWarning()
+        // One banner, not two. A pilot who has left the app is idle by
+        // definition, and of the two things to say, "your drone is coming down
+        // and here is how to stop it" is the one that matters.
+        if (failsafeLanding) {
+            FailsafeLandingWarning(onResume = viewModel::resumeControl)
+        } else if (pilotIdle) {
+            IdleWarning()
+        }
 
         // Outside the scroll on purpose. Land and Emergency are the controls you
         // reach for when something is going wrong, and scrolling to find them is
@@ -247,6 +258,47 @@ private fun IdleWarning() {
             modifier = Modifier.padding(12.dp),
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+/**
+ * Shown after coming back to a drone that was left to land itself. Carries the
+ * only control that interrupts that landing — see TelloController.resumeControl.
+ *
+ * No arming tap, unlike Emergency: this is a recovery action taken while the
+ * drone is descending onto whatever is underneath it, and it sits in its own
+ * banner rather than among the buttons a thumb rests on.
+ */
+@Composable
+private fun FailsafeLandingWarning(onResume: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "You left the app while the drone was flying, so it is landing itself. " +
+                    "The controls are locked — Land and Emergency still work.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                onClick = onResume,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Text("TAKE BACK CONTROL")
+            }
+        }
     }
 }
 
@@ -376,7 +428,8 @@ private fun TelemetryCard(
     state: TelloState?,
     telemetryFresh: Boolean,
     connected: Boolean,
-    busy: Boolean,
+    /** `battery?` is a command like any other, so it locks with the rest. */
+    canQuery: Boolean,
     onRefreshBattery: () -> Unit,
 ) {
     SectionCard {
@@ -386,7 +439,7 @@ private fun TelemetryCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Telemetry", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onRefreshBattery, enabled = connected && !busy) {
+            TextButton(onClick = onRefreshBattery, enabled = canQuery) {
                 Text("battery?")
             }
         }

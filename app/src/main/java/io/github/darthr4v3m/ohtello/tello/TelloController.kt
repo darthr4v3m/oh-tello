@@ -112,6 +112,19 @@ class TelloController(
     private val _airborne = MutableStateFlow(false)
     val airborne: StateFlow<Boolean> = _airborne.asStateFlow()
 
+    /**
+     * True once the drone has been handed to its own failsafe and not yet taken
+     * back. See [setOperatorPresent] and [resumeControl].
+     *
+     * A latch rather than a mirror of "is the app backgrounded": returning to
+     * the app must not, on its own, cancel a landing that is already underway.
+     * Kept as the flow itself rather than a `@Volatile` field with a flow beside
+     * it — one piece of state, safe to read from the telemetry loop and the UI
+     * thread alike, with no second copy to fall out of step.
+     */
+    private val _failsafeLanding = MutableStateFlow(false)
+    val failsafeLanding: StateFlow<Boolean> = _failsafeLanding.asStateFlow()
+
     private val commandMutex = Mutex()
     private val logIds = AtomicLong(0)
 
@@ -246,6 +259,9 @@ class TelloController(
      * interleave with a command that *is* waiting for its reply.
      */
     suspend fun sendNoWait(command: String) {
+        // `rc` reaches here through [send], which has already refused it if the
+        // drone is landing itself; this covers any future caller coming direct.
+        refusedWhileLandingItself(command)?.let { return }
         val socket = commandSocket ?: return
         withContext(ioDispatcher) {
             commandMutex.withLock {
@@ -297,6 +313,13 @@ class TelloController(
         kind: CommandLogEntry.Kind,
     ): TelloResponse {
         val socket = commandSocket ?: return notConnected(command)
+
+        // Keepalives are exempt: they are already held off by [sendKeepAlives]
+        // while the latch is set, and by the time one reaches here the pilot has
+        // taken control back.
+        if (kind != CommandLogEntry.Kind.KEEPALIVE) {
+            refusedWhileLandingItself(command)?.let { return it }
+        }
 
         if (TelloCommands.expectsNoResponse(command)) {
             // Guard rail: waiting on an `rc` reply would always burn the full
@@ -480,6 +503,12 @@ class TelloController(
 
             _airborne.value = judgeAirborne()
 
+            // Down and still: the failsafe has finished, so give the controls
+            // back without making the pilot ask. [judgeAirborne] answers "yes"
+            // when there is no telemetry to judge from, so silence holds the
+            // lock on rather than releasing it — the harmless direction.
+            if (!_airborne.value) _failsafeLanding.value = false
+
             _pilotIdle.value = _connection.value is ConnectionState.Connected &&
                 lastPilotCommandAtMillis != 0L &&
                 idleFor >= idleWarningMillis &&
@@ -503,8 +532,9 @@ class TelloController(
 
             // With nobody watching the screen, the right thing is to stop
             // talking and let the drone's own failsafe put it down. See
-            // [operatorPresent].
-            if (!operatorPresent) continue
+            // [operatorPresent]. The latch outlives the backgrounding: a
+            // handover already in progress is not undone by the app reappearing.
+            if (!operatorPresent || _failsafeLanding.value) continue
 
             if (clock() - lastCommandAtMillis < KEEPALIVE_INTERVAL_MS) continue
 
@@ -551,19 +581,48 @@ class TelloController(
      *
      * Costs no permission — this is the app doing less in the background, not
      * more — and stops the process waking every five seconds in your pocket.
+     *
+     * Leaving while the drone is airborne also *latches* [failsafeLanding], and
+     * coming back does not clear it. Returning used to resume the keepalive
+     * within half a second, which the drone reads as "the pilot is back" and
+     * abandons its landing for — observed leaving the aircraft with its motors
+     * running at ground level, at the moment a hand reaches in for it. Once the
+     * drone has been handed over, only [resumeControl] takes it back.
      */
     fun setOperatorPresent(present: Boolean) {
         if (operatorPresent == present) return
         operatorPresent = present
         if (_connection.value !is ConnectionState.Connected) return
+
+        // Only an airborne drone has a landing to hand over. Backgrounding with
+        // it parked is ordinary app switching and must stay free of charge.
+        if (!present && _airborne.value) _failsafeLanding.value = true
+
         log(
             CommandLogEntry.Kind.INFO,
-            if (present) {
-                "app in the foreground — keepalive resumed"
-            } else {
-                "app backgrounded — keepalive stopped, the drone will land itself shortly"
+            when {
+                present && _failsafeLanding.value ->
+                    "app in the foreground — the drone is still landing itself, " +
+                        "controls locked until you take back control"
+                present -> "app in the foreground — keepalive resumed"
+                else -> "app backgrounded — keepalive stopped, the drone will land itself shortly"
             },
         )
+    }
+
+    /**
+     * The deliberate act that interrupts a failsafe landing: unlatches
+     * [failsafeLanding], which lets the keepalive speak again on its next tick
+     * and unlocks the controls.
+     *
+     * Sends nothing itself. The keepalive is due within [FRESHNESS_TICK_MS] and
+     * goes through the same mutex as everything else, so taking control back can
+     * never cut in front of a command that is already waiting for its reply.
+     */
+    fun resumeControl() {
+        if (!_failsafeLanding.value) return
+        _failsafeLanding.value = false
+        log(CommandLogEntry.Kind.INFO, "pilot took back control — keepalive resumed")
     }
 
     // --------------------------------------------------------------- internals
@@ -605,6 +664,28 @@ class TelloController(
         return TelloResponse.Unreachable(message)
     }
 
+    /**
+     * Refuses pilot commands while the drone is landing itself, returning null
+     * when there is nothing to refuse.
+     *
+     * The drone cannot tell one command from another: *anything* it hears resets
+     * its failsafe timer and it goes back to hovering. So locking the keepalive
+     * alone would only move the bug — a stray tap on the D-pad or `battery?`
+     * would cancel the landing exactly as silently. Interrupting has to be one
+     * deliberate act, which is [resumeControl] and nothing else.
+     *
+     * `land` and `emergency` are deliberately not covered: they go out through
+     * [sendPriority], which never touches this path. Telling the drone to come
+     * down is never the wrong thing to allow while it is coming down.
+     */
+    private fun refusedWhileLandingItself(command: String): TelloResponse? {
+        if (!_failsafeLanding.value) return null
+        val message = "the drone is landing itself — `$command` was not sent. " +
+            "Take back control first, or press Land"
+        log(CommandLogEntry.Kind.ERROR, message)
+        return TelloResponse.Unreachable(message)
+    }
+
     private fun teardown() {
         // Close the sockets first: a blocking receive() only returns by being
         // closed underneath, cancelling its coroutine will not wake it.
@@ -624,6 +705,9 @@ class TelloController(
         lastMotorAdvanceAtMillis = 0
         _pilotIdle.value = false
         _airborne.value = false
+        // A handover belongs to one flight. The next connect starts with the
+        // controls live, whatever state the last one ended in.
+        _failsafeLanding.value = false
     }
 
     private fun log(kind: CommandLogEntry.Kind, text: String) {
