@@ -104,6 +104,12 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
     /** Raised when the pilot has sent nothing for nearly the drone's failsafe window. */
     val pilotIdle: StateFlow<Boolean> = controller.pilotIdle
 
+    /**
+     * True while the drone is landing itself because the app was left. The
+     * controls stay locked until [resumeControl]; see TelloController.
+     */
+    val failsafeLanding: StateFlow<Boolean> = controller.failsafeLanding
+
     /** True while a command is in flight, so the UI can grey out the D-pad. */
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -171,6 +177,13 @@ class TelloViewModel(application: Application) : AndroidViewModel(application) {
             notifier.warnDroneWillLand()
         }
     }
+
+    /**
+     * The one action that interrupts a failsafe landing. Deliberately not routed
+     * through [runExclusively]: it sends nothing, so there is nothing to be busy
+     * with, and it has to work while a command is still in flight.
+     */
+    fun resumeControl() = controller.resumeControl()
 
     /** Land, then let the caller finish the activity — used by the back gesture. */
     fun landThen(onDone: () -> Unit) {

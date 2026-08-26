@@ -17,6 +17,9 @@ screen, e.g. `0.1.0-pr1-6e93c15`)
 **Complete. Part A 20/20, Part B 15/15, Part C 2/2**, on a Ryze Tello flown from a Pixel 7 running
 Android 17 — the device the official app cannot launch on.
 
+*Since that run, the fix for the failsafe-interruption finding below has reopened B9, B10 and
+added B10a. They need re-flying; nothing else is affected.*
+
 Part B was run frozen at `229dd1e`, deliberately: every fix during the earlier rounds invalidated
 tests that had already passed, so the code was pinned and defects were written down rather than
 fixed mid-run. Nothing regressed during the frozen run.
@@ -44,7 +47,10 @@ fixed mid-run. Nothing regressed during the frozen run.
 - **Export pairs the newest console log with the newest recording independently**, so exporting right
   after a fresh launch can pair a new empty log with an older CSV.
 
-The last two are open issues, not fixed here.
+The last two were open issues at the end of this run. The failsafe interruption is now fixed —
+leaving the app hands the drone over and only a deliberate **TAKE BACK CONTROL** tap interrupts
+the landing. **B9, B10 and the new B10a describe that behaviour and are unchecked**: they have not
+been flown since the change, and the results below them belong to the old behaviour.
 
 **Which build each result came from:** A1-A9, A13-A15 and A17 on `b05f374`; A16 and A18 on
 `a9bdfb4`; A10, A19 on `c882619`; A11, A12 and all of Part B on `229dd1e`.
@@ -300,13 +306,27 @@ banner should have been up. Asking a pilot to produce that condition on demand d
 - a notification within ~2 seconds: *"The drone is about to land itself"*
 - the drone begins descending roughly 10–15 seconds after you left the app
 - it lands under control, not a drop
-**Then:** tap the notification — the app reopens and the console shows the keepalive resumed.
-- [x] Pass — notes: `notification appeared, controlled landing, keepalive resumed at 17:29:50.126`
+**Then:** tap the notification — the app reopens, the banner says the drone is landing itself,
+and the console shows **no** keepalive resuming. Let it finish landing; the banner clears itself
+and the controls come back once it is down.
+- [ ] Pass — notes: ``
 
-### B10 — Coming straight back does not land it
+### B10 — Coming straight back does not take the drone back
 **Do:** hover, press Home, and return to the app within ~3 seconds.
-**Expect:** the drone keeps hovering. A notification may briefly appear; it is cleared on return.
-- [x] Pass — notes: `3s away mid-takeoff; held 70cm throughout, telemetry never stopped`
+**Expect:** the drone does **not** simply carry on hovering. The banner says it is landing itself,
+TAKE OFF and the D-pad and `battery?` are greyed out, and the drone continues down.
+**Then:** tap **TAKE BACK CONTROL**.
+**Expect:** the drone stops descending and holds. The console shows the keepalive resuming, the
+banner goes, and the controls come back.
+**Note:** this reverses the old expectation — a 3-second glance at another app used to keep the
+drone up by itself. It now costs one deliberate tap, which is the point: returning to the app
+cannot be allowed to cancel a landing silently. See issue #5.
+- [ ] Pass — notes: ``
+
+### B10a — Land works while the drone is landing itself
+**Do:** hover, press Home, return to the app, and with the banner showing press **LAND**.
+**Expect:** `land` is sent and the drone completes the landing. Land is never locked by the banner.
+- [ ] Pass — notes: ``
 
 ### B11 — Back gesture lands it
 **Do:** hover, swipe back, choose **Land, then quit**.
