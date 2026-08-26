@@ -4,8 +4,8 @@ import io.github.darthr4v3m.ohtello.tello.protocol.MoveDirection
 import io.github.darthr4v3m.ohtello.tello.protocol.TelloResponse
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
